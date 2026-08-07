@@ -1,0 +1,18 @@
+diff --git a/added.txt b/added.txt
+new file mode 100644
+index 0000000..3e75765
+--- /dev/null
++++ b/added.txt
+@@ -0,0 +1 @@
++new
+diff --git a/to_rename.txt b/renamed.txt
+similarity index 100%
+rename from to_rename.txt
+rename to renamed.txt
+diff --git a/to_delete.txt b/to_delete.txt
+deleted file mode 100644
+index b680253..0000000
+--- a/to_delete.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-z

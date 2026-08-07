@@ -1,0 +1,15 @@
+diff --git a/diff_head.txt b/diff_buffer.txt
+index 1c02f23..2f791bb 100644
+--- a/diff_head.txt
++++ b/diff_buffer.txt
+@@ -2,8 +2,9 @@ extends Node
+ 
+ func _ready() -> void:
+ 	var a = 1
+-	var b = 2
++	var b = 20
+ 	print(a + b)
++	print("done")
+ 
+ 
+ func unused() -> void:

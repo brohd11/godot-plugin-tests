@@ -1,0 +1,9 @@
+# branch.oid da8dcfa5561cedb4cb3f7a859b588cafa7caa5fa
+# branch.head main
+1 .M N... 100644 100644 100644 4cb29ea38f70d7c61b2a3a25b02e3bdf44905402 4cb29ea38f70d7c61b2a3a25b02e3bdf44905402 plain.txt
+? untracked.txt
+! .DS_Store
+! .addons/
+! .godot/
+! addons/
+! "ig\"nored dir/"

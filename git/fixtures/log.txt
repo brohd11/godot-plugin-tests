@@ -1,0 +1,5 @@
+0d41245clean up tree helper, get addons optionsbrohd14 hours ago0d4124521aa1a32116e04dde68d488cd4008c11dHEAD -> main, origin/main, origin/HEAD
+67b0b57bump versionbrohd7 months ago67b0b5763e9c36493c86ba7b2ce3f798d2865161tag: v0.7.2
+dee72e3add license gen, add plugin name completion, fix export not using yml configbrohd4 days agodee72e3a8646d6bf2fad67863afc7eeee9601fa4
+def9131change gitignore strategybrohd10 months agodef9131b322f17325d89e001d6e3b87686f29b95tag: 0-5-0
+deadbeea doubly tagged commitT1 day agodeadbeedeadbeedeadbeedeadbeedeadbeebeeftag: v9.0.0, tag: latest
