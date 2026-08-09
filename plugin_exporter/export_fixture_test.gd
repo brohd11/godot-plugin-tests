@@ -119,6 +119,16 @@ static func _test_layout() -> void:
 	_check("dependency tag: plain", _found(dir, "yaml_parser/version.cfg"), true)
 
 	_check("licenses gathered", _found(dir, "licenses/addon_lib_brohd/LICENSE"), true)
+
+	# include_docs: export_ignore/doc lands as .doc, structure intact, copied verbatim. The image
+	# must arrive without its sidecar - that .import points at this project's .godot cache, and
+	# nothing in a dot-prefixed folder is imported in the plugin it ships to anyway.
+	_check("docs: top level", _exists(dir, ".doc/index.md"), true)
+	_check("docs: nested", _exists(dir, ".doc/guide/nested.md"), true)
+	_check("docs: non-markdown carried too", _exists(dir, ".doc/images/shot.png"), true)
+	_check("docs: no import sidecar", _exists(dir, ".doc/images/shot.png.import"), false)
+	_check("docs: source folder still excluded", _exists(dir, "export_ignore/doc/index.md"), false)
+	_check("docs: hidden folder reaches the zip", _zipped(dir, ".doc/index.md"), true)
 	_check("singleton module manifest", _has(dir, ".export_data", "PETSingletonMod"), true)
 	_check("singleton module version from tag", _has(dir, ".export_data", "0.2.0"), true)
 	_check("min version written to cfg", _has(dir, "plugin.cfg", "minimum_version="), true)
@@ -237,6 +247,8 @@ static func _test_renamed() -> void:
 	# repo that exercises it.
 	_check("renamed: license still landed inside the export",
 		_found(dir, "licenses/addon_lib_brohd/LICENSE"), true)
+	# gather_docs maps out of res:// the same way, so it shares that hazard.
+	_check("renamed: docs landed inside the export", _exists(dir, ".doc/index.md"), true)
 
 
 static func _test_backport() -> void:
@@ -341,6 +353,25 @@ static func _walk(dir:String) -> Array[String]:
 
 static func _exists(dir:String, relative:String) -> bool:
 	return FileAccess.file_exists(dir.path_join(relative))
+
+
+## True when the variant's zip carries `relative`. The zip is written from a separate walk of the
+## export, so a file being on disk is no proof it was packaged - hidden folders especially.
+static func _zipped(dir:String, relative:String) -> bool:
+	var plugin_dir = dir.trim_suffix("/")
+	var zip_path = plugin_dir.get_base_dir() + ".zip"
+	var reader = ZIPReader.new()
+	if reader.open(zip_path) != OK:
+		_fail("no zip written at " + zip_path)
+		return false
+	var suffix = plugin_dir.get_file().path_join(relative)
+	var found = false
+	for entry in reader.get_files():
+		if entry.ends_with(suffix):
+			found = true
+			break
+	reader.close()
+	return found
 
 
 ## True when any file in the export ends with `suffix` - for targets whose exact location inside
