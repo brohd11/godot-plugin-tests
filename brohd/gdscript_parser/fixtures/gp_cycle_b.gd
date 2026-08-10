@@ -1,5 +1,5 @@
 @tool
-extends ACycle
+extends "res://tests/brohd/gdscript_parser/fixtures/gp_cycle_a.gd" #! ext ACycle
 ## Fixture: other half of the mutual-preload cycle. `extends ACycle` names a preload const declared
 ## BELOW the extends line, PATH forward-references P, and InnerB extends the preload const.
 
