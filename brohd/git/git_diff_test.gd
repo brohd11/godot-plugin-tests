@@ -41,6 +41,11 @@ static func run_tests() -> Dictionary:
 	_test_markers_out_of_range()
 	_test_fill_markers()
 	_test_edit_distance_budget()
+	_test_map_unchanged()
+	_test_map_across_an_insertion()
+	_test_map_across_a_deletion()
+	_test_map_context_inside_a_hunk()
+	_test_map_a_replacement()
 
 	var output:Array[String] = []
 	output.append("git_diff: %d passed, %d failed" % [_passed, _failures.size()])
@@ -331,3 +336,65 @@ static func _test_edit_distance_budget() -> void:
 	_check("budget fallback adds everything", hunks[0][GitUtil.Keys.NEW_COUNT], n)
 	_check("budget fallback lines are removals then additions",
 		_origins(hunks[0]), "-".repeat(n) + "+".repeat(n))
+
+
+# --- mapping a buffer line back to the commit ----------------------------------------------------
+
+## What the caret line's history needs: git blame numbers lines as HEAD has them, so a buffer edited
+## since has to be walked back through the same hunks the gutter already drew.
+static func _test_map_unchanged() -> void:
+	# no hunks is the common case by far — an unedited buffer maps straight through
+	_check("an unchanged line is itself", GitDiff.map_new_to_old([], 7), 7)
+	_check("line zero", GitDiff.map_new_to_old([], 0), 0)
+	_check("a line before the file starts", GitDiff.map_new_to_old([], -1), -1)
+
+
+static func _test_map_across_an_insertion() -> void:
+	var old_lines = GitDiff.to_lines("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
+	var new_lines = GitDiff.to_lines("1\n2\n3\nNEW\n4\n5\n6\n7\n8\n9\n10\n")
+	var hunks = GitDiff.diff_lines(old_lines, new_lines)
+
+	_check("before the insertion", GitDiff.map_new_to_old(hunks, 2), 2)
+	_check("the inserted line has no commit", GitDiff.map_new_to_old(hunks, 3), -1)
+	_check("after the insertion, shifted back one", GitDiff.map_new_to_old(hunks, 4), 3)
+	_check("the last line", GitDiff.map_new_to_old(hunks, new_lines.size() - 1), old_lines.size() - 1)
+
+
+static func _test_map_across_a_deletion() -> void:
+	var old_lines = GitDiff.to_lines("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
+	var new_lines = GitDiff.to_lines("1\n2\n3\n4\n6\n7\n8\n9\n10\n")
+	var hunks = GitDiff.diff_lines(old_lines, new_lines)
+
+	_check("before the deletion", GitDiff.map_new_to_old(hunks, 3), 3)
+	# a removed line occupies nothing in the buffer, so the line that closed over it is the next one
+	_check("after the deletion, shifted forward one", GitDiff.map_new_to_old(hunks, 4), 5)
+	_check("the last line", GitDiff.map_new_to_old(hunks, new_lines.size() - 1), old_lines.size() - 1)
+
+
+## The one that matters. diff_lines() carries CONTEXT lines either side of a change, so a hunk's
+## span is much wider than what it changed — treating "inside a hunk" as "uncommitted" would blank
+## the six untouched lines around every edit.
+static func _test_map_context_inside_a_hunk() -> void:
+	var old_lines = GitDiff.to_lines("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
+	var new_lines = GitDiff.to_lines("1\n2\n3\n4\nFIVE\n6\n7\n8\n9\n10\n")
+	var hunks = GitDiff.diff_lines(old_lines, new_lines)
+
+	_check("the hunk really is wider than its change", _spans(hunks[0]), [2, 7, 2, 7])
+	_check("context before the change maps", GitDiff.map_new_to_old(hunks, 3), 3)
+	_check("the changed line does not", GitDiff.map_new_to_old(hunks, 4), -1)
+	_check("context after the change maps", GitDiff.map_new_to_old(hunks, 5), 5)
+
+
+## Unequal counts either side: the offset carried past the hunk is the difference between them, not
+## the count of anything.
+static func _test_map_a_replacement() -> void:
+	var old_lines = GitDiff.to_lines("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n")
+	var new_lines = GitDiff.to_lines("1\n2\n3\n4\nA\nB\nC\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n")
+	var hunks = GitDiff.diff_lines(old_lines, new_lines)
+
+	_check("two lines out, three in", _spans(hunks[0]), [2, 8, 2, 9])
+	_check("before the hunk", GitDiff.map_new_to_old(hunks, 0), 0)
+	for line in [4, 5, 6]:
+		_check("replacement line %d has no commit" % line, GitDiff.map_new_to_old(hunks, line), -1)
+	_check("context inside, after the replacement", GitDiff.map_new_to_old(hunks, 7), 6)
+	_check("past the hunk, shifted by the difference", GitDiff.map_new_to_old(hunks, 10), 9)

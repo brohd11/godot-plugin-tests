@@ -1,0 +1,256 @@
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 1 1 3
+author brohd
+author-mail <brohdielr@proton.me>
+author-time 1784329953
+author-tz -0700
+committer brohd
+committer-mail <brohdielr@proton.me>
+committer-time 1784329953
+committer-tz -0700
+summary init commit
+boundary
+filename plugin.gd
+	@tool
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 2 2
+	extends EditorPlugin
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 3 3
+	
+667acc7c3a3fc3cd273875cb90c6083bd16af9f9 7 4 1
+author brohd
+author-mail <brohdielr@proton.me>
+author-time 1784348554
+author-tz -0700
+committer brohd
+committer-mail <brohdielr@proton.me>
+committer-time 1784348554
+committer-tz -0700
+summary fix mini map draw alignments, move panel files into git view
+previous 2b3bda654a626e9176fee6d198acf9655fce5b0a plugin.gd
+filename plugin.gd
+	const DiffGutter = preload("res://addons/git_view/src/diff_gutter/git_diff_gutter.gd")
+f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 8 5 1
+author brohd
+author-mail <brohdielr@proton.me>
+author-time 1784634352
+author-tz -0700
+committer brohd
+committer-mail <brohdielr@proton.me>
+committer-time 1784634352
+committer-tz -0700
+summary first pass of code regions, separate minimap helpers
+previous 079b133697fe285304afc3ba3eb73ee3e3972994 plugin.gd
+filename plugin.gd
+	const RegionMinimap = preload("res://addons/git_view/src/minimap/code_region_minimap.gd")
+079b133697fe285304afc3ba3eb73ee3e3972994 8 6 2
+author brohd
+author-mail <brohdielr@proton.me>
+author-time 1784623099
+author-tz -0700
+committer brohd
+committer-mail <brohdielr@proton.me>
+committer-time 1784623099
+committer-tz -0700
+summary add simplified change list
+previous 5c51dcb9084fe6be9fef8075a1e30e012fb4f3b0 plugin.gd
+filename plugin.gd
+	const GitPanel = preload("res://addons/git_view/src/panel/panel.gd")
+079b133697fe285304afc3ba3eb73ee3e3972994 9 7
+	
+f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 11 8 1
+	const GIT_SECTION = &"GitView"
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 8 9 2
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 9 10
+	var diff_gutter:DiffGutter
+f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 14 11 1
+	var region_minimap:RegionMinimap
+079b133697fe285304afc3ba3eb73ee3e3972994 12 12 3
+	var git_panel:GitPanel
+079b133697fe285304afc3ba3eb73ee3e3972994 13 13
+	
+079b133697fe285304afc3ba3eb73ee3e3972994 14 14
+	var dock_manager:DockManager
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 10 15 23
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 11 16
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 12 17
+	func _get_plugin_name() -> String:
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 13 18
+		return "Git View"
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 14 19
+	func _get_plugin_icon() -> Texture2D:
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 15 20
+		return EditorInterface.get_base_control().get_theme_icon("Node", &"EditorIcons")
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 16 21
+	func _has_main_screen() -> bool:
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 17 22
+		return true
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 18 23
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 19 24
+	func _make_visible(visible:bool) -> void:
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 20 25
+		pass
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 21 26
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 22 27
+	func _enable_plugin() -> void:
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 23 28
+		pass
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 24 29
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 25 30
+	func _disable_plugin() -> void:
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 26 31
+		pass
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 27 32
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 28 33
+	func _enter_tree() -> void:
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 29 34
+		var gs = GitService.register_node(self)
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 30 35
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 31 36
+		diff_gutter = DiffGutter.new()
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 32 37
+		add_child(diff_gutter)
+0e86dc15faf90530c2616bb677dd87181ff4e7b7 38 38 1
+author brohd
+author-mail <brohdielr@proton.me>
+author-time 1785970130
+author-tz -0700
+committer brohd
+committer-mail <brohdielr@proton.me>
+committer-time 1785970130
+committer-tz -0700
+summary update for git service new refresh signal
+previous 008c4e1ec3df6bbbee75b4a0f821ffd4f83917e2 plugin.gd
+filename plugin.gd
+		gs.refresh_finished.connect(_on_git_refresh_finished)
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 34 39 1
+		gs.status_updated.connect(_on_git_status_updated)
+0e86dc15faf90530c2616bb677dd87181ff4e7b7 40 40 1
+		# the first drain is a debounce away; sync now so the gutter is not blank until then
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 36 41 1
+		diff_gutter.set_repos(gs.repos)
+f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 45 42 1
+	
+9db62e10edf2da7e4f34b728016bb7b39020ac78 43 43 1
+author brohd
+author-mail <brohdielr@proton.me>
+author-time 1784973100
+author-tz -0700
+committer brohd
+committer-mail <brohdielr@proton.me>
+committer-time 1784973100
+committer-tz -0700
+summary clean up comments
+previous f686cde3379574318970845490fe90b032b2c7b0 plugin.gd
+filename plugin.gd
+		# doesn't use git, but does use the minimap
+f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 47 44 2
+		region_minimap = RegionMinimap.new()
+f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 48 45
+		add_child(region_minimap)
+079b133697fe285304afc3ba3eb73ee3e3972994 42 46 2
+		
+079b133697fe285304afc3ba3eb73ee3e3972994 43 47
+		await get_tree().process_frame
+f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 51 48 3
+		
+f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 52 49
+		git_panel = GitPanel.new()
+f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 53 50
+		
+9db62e10edf2da7e4f34b728016bb7b39020ac78 51 51 3
+		var script_dock = Singletons.CheckInstance.get_instance("ScriptDock")
+9db62e10edf2da7e4f34b728016bb7b39020ac78 52 52
+		if is_instance_valid(script_dock): # if ScriptDock is available: add. Not a hard dep
+9db62e10edf2da7e4f34b728016bb7b39020ac78 53 53
+			script_dock.call_on_ready(script_dock.add_section.bind(GIT_SECTION, git_panel))
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 37 54 3
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 38 55
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 39 56
+	func _exit_tree() -> void:
+9db62e10edf2da7e4f34b728016bb7b39020ac78 57 57 7
+		var script_dock = Singletons.CheckInstance.get_instance("ScriptDock")
+9db62e10edf2da7e4f34b728016bb7b39020ac78 58 58
+		if is_instance_valid(script_dock):
+9db62e10edf2da7e4f34b728016bb7b39020ac78 59 59
+			var gp_section = script_dock.get_instance().sidebar_container.get_section(GIT_SECTION)
+9db62e10edf2da7e4f34b728016bb7b39020ac78 60 60
+			if is_instance_valid(gp_section):
+9db62e10edf2da7e4f34b728016bb7b39020ac78 61 61
+				script_dock.remove_section(GIT_SECTION)
+9db62e10edf2da7e4f34b728016bb7b39020ac78 62 62
+				git_panel.queue_free()
+9db62e10edf2da7e4f34b728016bb7b39020ac78 63 63
+		
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 41 64 2
+		if is_instance_valid(diff_gutter):
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 42 65
+			diff_gutter.clean_up()
+f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 65 66 2
+		if is_instance_valid(region_minimap):
+f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 66 67
+			region_minimap.clean_up()
+9db62e10edf2da7e4f34b728016bb7b39020ac78 68 68 1
+		
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 43 69 3
+		GitService.unregister_node(self)
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 44 70
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 45 71
+	
+9db62e10edf2da7e4f34b728016bb7b39020ac78 72 72 1
+	# commits move HEAD, so flush and re-read every open script's baseline in that repo.
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 48 73 2
+	func _on_git_status_updated(repo_dir:String) -> void:
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 49 74
+		if is_instance_valid(diff_gutter):
+75165b2466d5080f42957add82c18dfeffdc29af 74 75 2
+author brohd
+author-mail <brohdielr@proton.me>
+author-time 1784669832
+author-tz -0700
+committer brohd
+committer-mail <brohdielr@proton.me>
+committer-time 1784669832
+committer-tz -0700
+summary Clean up lists, delete old overlay
+previous f0ccb3f0a22b4a1b567baded9cf676b6a51c1b26 plugin.gd
+filename plugin.gd
+			# for repo_dir, not the panel's current repo — status_updated fires for every repo and
+75165b2466d5080f42957add82c18dfeffdc29af 75 76
+			# get_branch_oid() hands back current_repo's oid; a wrong oid stored here silently suppresses a real flush later
+d86cd306e20767fa164c19e8f380992fec17f42e 54 77 1
+author brohd
+author-mail <brohdielr@proton.me>
+author-time 1784496098
+author-tz -0700
+committer brohd
+committer-mail <brohdielr@proton.me>
+committer-time 1784496098
+committer-tz -0700
+summary update for file tracking, fix last line index err
+previous 52995540286284603f6f58c08c8a8e31bd5adbf2 plugin.gd
+filename plugin.gd
+			diff_gutter.head_moved(repo_dir, GitService.get_instance().get_branch_oid_for(repo_dir))
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 51 78 2
+	
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 52 79
+	
+0e86dc15faf90530c2616bb677dd87181ff4e7b7 80 80 3
+	# set_repos no-ops unless the set actually moved, so this is free on the refreshes that did not add
+0e86dc15faf90530c2616bb677dd87181ff4e7b7 81 81
+	# or drop a repo
+0e86dc15faf90530c2616bb677dd87181ff4e7b7 82 82
+	func _on_git_refresh_finished() -> void:
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 54 83 2
+		if is_instance_valid(diff_gutter):
+7fc9c44829706fe7e6c9f1d42d89587ce365405b 55 84
+			diff_gutter.set_repos(GitService.get_instance().repos)
