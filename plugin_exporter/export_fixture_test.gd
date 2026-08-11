@@ -165,6 +165,11 @@ static func _test_rewrites() -> void:
 
 	_check("uid preload resolved to the copy", _has(dir, "src/core/consumer.gd",
 		'preload("uid://'), false)
+	_check("malformed absolute path rewritten to the copy", _has(dir, "src/utils_remote.gd",
+		'preload("res://addons/plugin_exporter_test/src/remote/addons/addon_lib/brohd/alib_runtime/utils/u_list.gd")'), true)
+	for variant in _dirs:
+		_check("%s: malformed absolute path normalized" % variant,
+			_has(_dirs[variant], "src/utils_remote.gd", "addon_lib/brohd//"), false)
 	_check("ignore-remote path untouched", _has(dir, "src/core/consumer.gd",
 		'"res://addons/addon_lib/brohd/README.md" #! ignore-remote'), true)
 	_check("namespace directive stripped", _has(dir, "src/core/tags.gd", "#! namespace"), false)
@@ -202,6 +207,8 @@ static func _test_reduction() -> void:
 		"return UList.get_next_item"), true)
 	_check("reduced: no chain left", _has(dir, "src/core/access_paths.gd",
 		"ALibRuntime.Utils"), false)
+	_check("reduced: matching preload not redeclared", _count(dir, "src/core/access_paths.gd",
+		"const UObject = preload("), 1)
 	_check("reduced: pass-through hub dropped", _found(dir, "_ns/a_lib_runtime.gd"), false)
 
 	# One mention that no reduction rewrites away is enough to keep a hub.
@@ -395,6 +402,13 @@ static func _has(dir:String, relative:String, needle:String) -> bool:
 	if not FileAccess.file_exists(path):
 		return false
 	return FileAccess.get_file_as_string(path).find(needle) > -1
+
+
+static func _count(dir:String, relative:String, needle:String) -> int:
+	var path = dir.path_join(relative)
+	if not FileAccess.file_exists(path):
+		return 0
+	return FileAccess.get_file_as_string(path).count(needle)
 
 
 static func _check(label:String, got, expected) -> void:
