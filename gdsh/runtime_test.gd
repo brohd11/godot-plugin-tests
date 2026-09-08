@@ -7,6 +7,14 @@ const OVERRIDES = FIXTURES + "overrides/"
 var checks = 0
 var failures = 0
 
+
+class InputProbe extends Node:
+	var events:Array[InputEvent] = []
+
+	func _unhandled_input(event:InputEvent) -> void:
+		events.append(event)
+
+
 func _initialize():
 	_run_tests.call_deferred()
 
@@ -387,12 +395,32 @@ func _test_console():
 	check(console.prompt_label is RichTextLabel, "console exposes its prompt label")
 	check(console.input is CodeEdit, "console input is a CodeEdit")
 	check(console.output == null, "console transcript is optional")
-	equal(console.prompt_label.text, "Console $", "default console prompt")
+	check(console.get_text_edit() == console.input, "console returns its text edit")
+	check(console.get_prompt_label() == console.prompt_label, "console returns its prompt label")
+	var default_prompt = "[color=%s]Console $[/color]" % Color.LIGHT_BLUE.to_html()
+	equal(console.prompt_label.text, default_prompt, "default console prompt is light blue")
+	console.set_prompt("Plain >")
+	equal(console.prompt_label.text, "Plain >", "white fixed prompt has no color wrapper")
+	console.set_prompt("Debug >", Color.ORANGE)
+	var debug_prompt = "[color=%s]Debug >[/color]" % Color.ORANGE.to_html()
+	equal(console.prompt_label.text, debug_prompt, "colored fixed prompt uses BBCode")
+	console.execute("true")
+	equal(console.prompt_label.text, debug_prompt, "fixed prompt persists after execution")
+	console.set_context(console.context)
+	equal(console.prompt_label.text, debug_prompt, "fixed prompt persists after a context update")
+	console.prompt_formatter = func(_ctx): return "Formatted >"
+	equal(console.prompt_label.text, "Formatted >", "prompt formatter replaces a fixed prompt")
+	console.reset_prompt()
+	equal(console.prompt_label.text, default_prompt, "reset restores the dynamic light-blue prompt")
 	var source_font = load("res://addons/addon_lib/gdsh/internal/source_font.tres")
 	check(source_font is FontVariation, "console source font is a standalone FontVariation")
 	equal(source_font.get_font_name(), "JetBrains Mono", "console bundles the editor source font")
 	check(console.input.get_theme_font("font") == source_font, "console input uses the source font")
 	check(console.prompt_label.get_theme_font("normal_font") == source_font, "console prompt uses the source font")
+	var custom_font = source_font.duplicate()
+	console.add_font_override(custom_font)
+	check(console.input.get_theme_font("font") == custom_font, "font override applies to console input")
+	check(console.prompt_label.get_theme_font("normal_font") == custom_font, "font override applies to prompt")
 	check(console.context.scopes_hidden.has("echo"), "console context includes hidden GDSh builtins")
 
 	var submitted:Array = []
@@ -436,8 +464,18 @@ func _test_console():
 	var transcript = console.create_output()
 	check(transcript == console.create_output(), "console transcript creation is idempotent")
 	check(console.get_child(0) == transcript, "console transcript appears above the prompt")
-	check(transcript.get_theme_font("normal_font") == source_font, "console transcript uses the source font")
+	check(transcript.get_theme_font("normal_font") == custom_font, "future transcript inherits the active font override")
+	check(transcript.get_theme_font("mono_font") == custom_font, "font override covers transcript mono text")
+	console.remove_font_override()
+	check(not console.prompt_label.has_theme_font_override("normal_font"), "font removal clears the prompt override")
+	check(not console.input.has_theme_font_override("font"), "font removal clears the input override")
+	check(not transcript.has_theme_font_override("normal_font") and not transcript.has_theme_font_override("mono_font"), "font removal clears transcript overrides")
+	console._apply_theme()
+	check(not console.input.has_theme_font_override("font"), "theme changes do not restore a removed font override")
+	console.add_font_override(source_font)
+	check(transcript.get_theme_font("normal_font") == source_font, "font override applies to an existing transcript")
 	console.execute("echo visible")
+	check(console.prompt_label.text == default_prompt, "logged default prompt retains its light-blue source markup")
 	check(transcript.get_parsed_text().contains("Console $ echo visible"), "transcript echoes the prompt and command")
 	check(transcript.get_parsed_text().contains("visible"), "transcript appends stdout")
 	console.execute("unknown_console_command")
@@ -456,7 +494,8 @@ func _test_console():
 	replacement.cwd = "res://world/room"
 	console.prompt_formatter = Callable()
 	console.set_context(replacement)
-	equal(console.prompt_label.text, "Console room $", "console prompt follows replacement context cwd")
+	var room_prompt = "[color=%s]Console room $[/color]" % Color.LIGHT_BLUE.to_html()
+	equal(console.prompt_label.text, room_prompt, "console prompt follows replacement context cwd")
 	check(console.input.context == replacement, "console input follows replacement context")
 
 	console.load(OVERRIDES)
@@ -503,4 +542,86 @@ func _test_console():
 	console.input._on_text_changed() # Programmatic assignment does not emit TextEdit.text_changed.
 	equal(console.input.get_line_count(), 1, "console input remains one line after pasted newlines")
 	check(console.input.syntax_highlighter != null, "console input installs runtime syntax highlighting")
+	await _test_console_input_consumption(console, transcript)
 	console.queue_free()
+
+
+func _test_console_input_consumption(console, transcript:RichTextLabel) -> void:
+	var probe = InputProbe.new()
+	root.add_child(probe)
+	console.size = Vector2(640, 400)
+	console.input.release_focus()
+	var baseline_key = InputEventKey.new()
+	baseline_key.keycode = KEY_F9
+	baseline_key.pressed = true
+	Input.parse_input_event(baseline_key)
+	await process_frame
+	check(probe.events.size() == 1, "input probe receives an unhandled key without console focus")
+	probe.events.clear()
+	console.input.grab_focus()
+	await process_frame
+	for state in [
+		{"pressed": true, "echo": false},
+		{"pressed": false, "echo": false},
+		{"pressed": true, "echo": true},
+	]:
+		var key = InputEventKey.new()
+		key.keycode = KEY_F10
+		key.pressed = state.pressed
+		key.echo = state.echo
+		Input.parse_input_event(key)
+		await process_frame
+	check(probe.events.is_empty(), "focused console consumes key presses, releases, and repeats")
+	console.input.text = ""
+	var typed_key = InputEventKey.new()
+	typed_key.keycode = KEY_X
+	typed_key.unicode = "x".unicode_at(0)
+	typed_key.pressed = true
+	Input.parse_input_event(typed_key)
+	await process_frame
+	equal(console.input.text, "x", "consumed keyboard input still edits the focused console")
+	check(probe.events.is_empty(), "typed console input remains consumed")
+
+	console.input.release_focus()
+	transcript.clear()
+	for index in 80:
+		transcript.add_text("line %d\n" % index)
+	await process_frame
+	var baseline_wheel = InputEventMouseButton.new()
+	baseline_wheel.position = Vector2(639, 479)
+	baseline_wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	baseline_wheel.pressed = true
+	Input.parse_input_event(baseline_wheel)
+	await process_frame
+	check(probe.events.size() == 1, "input probe receives a wheel event outside the console")
+	probe.events.clear()
+	transcript.scroll_to_line(0)
+	await process_frame
+	var initial_scroll = transcript.get_v_scroll_bar().value
+	var scroll_inside = InputEventMouseButton.new()
+	scroll_inside.position = transcript.global_position + Vector2(4, 4)
+	scroll_inside.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	scroll_inside.pressed = true
+	Input.parse_input_event(scroll_inside)
+	await process_frame
+	check(transcript.get_v_scroll_bar().value > initial_scroll, "consumed wheel events still scroll the transcript")
+	check(probe.events.is_empty(), "scrolling transcript does not pass wheel events to the game")
+	for at_end in [false, true]:
+		transcript.scroll_to_line(transcript.get_line_count() - 1 if at_end else 0)
+		await process_frame
+		var wheel = InputEventMouseButton.new()
+		wheel.position = transcript.global_position + Vector2(4, 4)
+		wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN if at_end else MOUSE_BUTTON_WHEEL_UP
+		wheel.pressed = true
+		Input.parse_input_event(wheel)
+		await process_frame
+	check(probe.events.is_empty(), "transcript consumes wheel events at both scroll limits")
+	var pan = InputEventPanGesture.new()
+	pan.position = transcript.global_position + Vector2(4, 4)
+	pan.delta = Vector2(0, 1)
+	Input.parse_input_event(pan)
+	await process_frame
+	check(probe.events.is_empty(), "transcript consumes pan gestures")
+	check(transcript.mouse_filter == Control.MOUSE_FILTER_STOP, "transcript stops mouse events")
+	check(not transcript.mouse_force_pass_scroll_events, "transcript does not force scroll events to pass")
+	probe.queue_free()
