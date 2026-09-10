@@ -128,6 +128,9 @@ func _write(path:String, text:String):
 	var file = FileAccess.open(path, FileAccess.WRITE)
 	file.store_string(text)
 
+func _read(path:String) -> String:
+	return FileAccess.get_file_as_string(path)
+
 func _test_files():
 	equal(Sh.Context.new().cwd, "res://", "default resource working directory")
 	equal(output("source tests/gdsh/fixtures/hello.gdsh"), "resource script", "source from resource cwd")
@@ -310,9 +313,87 @@ func _test_redirection():
 			equal(ctx.stderr.strip_edges(), row[2], "redirect stderr: " + row[0])
 		equal(ctx.exit_code, row[3], "redirect status: " + row[0])
 
+	var temp = "user://gdsh_redirect_%s" % Time.get_ticks_usec()
+	DirAccess.make_dir_recursive_absolute(temp)
+	var ctx = session()
+	ctx.cwd = temp
+	run_text("echo first >output.txt", ctx)
+	equal(ctx.stdout, "", "file redirect removes stdout")
+	equal(_read(temp.path_join("output.txt")), "first\n", "stdout overwrite creates file")
+	run_text("echo second 1>output.txt", ctx)
+	equal(_read(temp.path_join("output.txt")), "second\n", "descriptor stdout overwrites file")
+	run_text("echo third >>output.txt", ctx)
+	equal(_read(temp.path_join("output.txt")), "second\nthird\n", "stdout append")
+	run_text("echo fourth 1>>output.txt", ctx)
+	equal(_read(temp.path_join("output.txt")), "second\nthird\nfourth\n", "descriptor stdout append")
+	_write(temp.path_join("earlier.txt"), "old")
+	run_text("echo final >earlier.txt >last.txt", ctx)
+	equal(_read(temp.path_join("earlier.txt")), "", "earlier redirect is still truncated")
+	equal(_read(temp.path_join("last.txt")), "final\n", "last stdout redirect wins")
+	ctx.stdout = ""
+	run_text("echo piped >piped.txt | sink", ctx)
+	equal(ctx.stdout.strip_edges(), "stdin:", "file stdout overrides pipeline destination")
+	equal(_read(temp.path_join("piped.txt")), "piped\n", "redirected pipeline stage writes file")
+
+	ctx.stdout = ""
+	ctx.stderr = ""
+	run_text("sink >stdout.txt 2>stderr.txt", ctx)
+	equal(ctx.stdout, "", "separate stdout file removes output")
+	equal(ctx.stderr, "", "separate stderr file removes diagnostic")
+	equal(_read(temp.path_join("stdout.txt")), "stdin:\n", "stdout file contents")
+	equal(_read(temp.path_join("stderr.txt")), "sink diagnostic\n", "stderr file contents")
+	run_text("sink 2>>stderr.txt", ctx)
+	equal(ctx.stdout.strip_edges(), "stdin:", "stderr append preserves stdout")
+	equal(_read(temp.path_join("stderr.txt")), "sink diagnostic\nsink diagnostic\n", "stderr append")
+
+	ctx.stdout = ""
+	ctx.stderr = ""
+	run_text("sink &>both.txt", ctx)
+	equal(_read(temp.path_join("both.txt")), "stdin:\nsink diagnostic\n", "combined redirect writes stdout then stderr")
+	run_text("sink &>>both.txt", ctx)
+	equal(_read(temp.path_join("both.txt")), "stdin:\nsink diagnostic\nstdin:\nsink diagnostic\n", "combined append")
+
+	_write(temp.path_join("input.txt"), "one\ntwo\n")
+	ctx.stdout = ""
+	ctx.stderr = ""
+	run_text("0<input.txt sink", ctx)
+	equal(ctx.stdout, "stdin:one\ntwo\n", "file input feeds stdin exactly")
+	ctx.stdout = ""
+	run_text("echo piped | sink <input.txt", ctx)
+	equal(ctx.stdout, "stdin:one\ntwo\n", "file input overrides pipeline input")
+	ctx.stdout = ""
+	run_text("sink <discard", ctx)
+	equal(ctx.stdout.strip_edges(), "stdin:", "discard supplies empty stdin")
+
+	ctx.stdout = ""
+	ctx.stderr = ""
+	ctx.variables["$OUT"] = "space name.txt"
+	run_text('echo spaced >"$OUT"', ctx)
+	equal(_read(temp.path_join("space name.txt")), "spaced\n", "quoted variable target")
+	run_text("echo dynamic >$(echo generated.txt)", ctx)
+	equal(_read(temp.path_join("generated.txt")), "dynamic\n", "substitution target")
+	var expanded_error = run_text("echo hidden >$(echo one two)", ctx)
+	equal(expanded_error.exit_code, 1, "multi-field target fails")
+	check(expanded_error.stderr.contains("exactly one non-empty path"), "multi-field target diagnostic")
+
+	var counter = Sh.Load.load_command(COMMANDS + "counter.gd")
+	counter.calls = 0
+	ctx.stdout = ""
+	ctx.stderr = ""
+	run_text("counter >missing/out.txt", ctx)
+	equal(counter.calls, 0, "output open failure skips command")
+	equal(ctx.exit_code, 1, "output open failure status")
+	check(ctx.stderr.contains("cannot open"), "output open failure diagnostic")
+	run_text("counter <missing.txt", ctx)
+	equal(counter.calls, 0, "input open failure skips command")
+
+	for name in ["output.txt", "earlier.txt", "last.txt", "piped.txt", "stdout.txt", "stderr.txt", "both.txt", "input.txt", "space name.txt", "generated.txt"]:
+		DirAccess.remove_absolute(temp.path_join(name))
+	DirAccess.remove_absolute(temp)
+
 func _test_syntax_errors():
 	var counter = Sh.Load.load_command(COMMANDS + "counter.gd")
-	for invalid in ['echo "unclosed', "echo 'unclosed", "echo \\", "echo $(echo unclosed", "echo $(true&&)", 'f(){echo missing', 'if true{echo missing', 'for x in a{echo missing', '(echo missing', 'echo literal{missing', 'echo hi}', 'echo hi)', 'echo hi|', 'echo hi&&', 'echo hi||', '||echo hi', 'else{echo no}', 'f(){echo hi}>discard', 'echo hi >', 'echo hi >file', 'echo hi >>discard', 'echo hi 3>discard', 'echo hi 2>&1', 'echo hi <file', 'echo hi &', 'echo hi |& sink', 'echo hi >$(counter)', 'X=$(true&&)', 'if false{echo hi >file}', 'X=one &', 'X=one |& sink']:
+	for invalid in ['echo "unclosed', "echo 'unclosed", "echo \\", "echo $(echo unclosed", "echo $(true&&)", 'f(){echo missing', 'if true{echo missing', 'for x in a{echo missing', '(echo missing', 'echo literal{missing', 'echo hi}', 'echo hi)', 'echo hi|', 'echo hi&&', 'echo hi||', '||echo hi', 'else{echo no}', 'f(){echo hi}>discard', 'echo hi >', 'echo hi &>>', 'echo hi 3>discard', 'echo hi 0>discard', 'echo hi 1<discard', 'echo hi 2<discard', 'echo hi 2>&1', 'echo hi <<file', 'echo hi &', 'echo hi |& sink', 'X=$(true&&)', 'X=one &', 'X=one |& sink']:
 		counter.calls = 0
 		var ctx = session()
 		run_text("counter;\n" + invalid, ctx)
@@ -331,6 +412,8 @@ func _test_structured_completion():
 		var options = complete(text)
 		check(options.has("discard") and options.has("/dev/null"), "discard completion: " + text)
 		check(not options.has("echo"), "redirect target excludes commands: " + text)
+	check(complete("sink <tests/gdsh/fixtures/he").has("tests/gdsh/fixtures/hello.gdsh"), "input file completion")
+	check(complete("sink >tests/gdsh/fixtures/").has("tests/gdsh/fixtures/hello.gdsh"), "output file completion")
 	check(complete("probe 2>discard --mo").has("--mode="), "flags after a redirection")
 	check(complete("probe --mode=\"two words\" one ").has("route:two words:1:-1:one"), "quoted flag value completion")
 	check(complete("probe 'unfinished").has("route:default:0:-1:unfinished"), "unfinished quote completion")
