@@ -30,6 +30,7 @@ static func run_tests() -> Dictionary:
 	_test_crlf()
 	_test_identical()
 	_test_round_trip_against_git()
+	_test_reverse_apply()
 	_test_single_modification()
 	_test_insert_into_empty()
 	_test_delete_at_eof()
@@ -117,6 +118,62 @@ static func _test_crlf() -> void:
 static func _test_identical() -> void:
 	_check("identical files do not diff",
 		GitDiff.diff_lines(GitDiff.to_lines("a\nb\nc\n"), GitDiff.to_lines("a\nb\nc\n")), [])
+
+
+## get_file_at_head() rebuilds the gutter's HEAD baseline by reverse-applying a patch to the file
+## on disk, because git will not hand blob bytes back through a pipe we can decode. That makes this
+## the property the whole baseline rests on: undoing a diff has to land exactly on its old side.
+static func _test_reverse_apply() -> void:
+	var git_hunks:Array = GitUtil.parse_patch(_read("diff_expected.patch"), REPO) \
+		.get("res://diff_buffer.txt", {}).get(GitUtil.Keys.HUNKS, [])
+
+	_check("git's own patch reverses back to HEAD",
+		GitUtil.reverse_apply(GitDiff.to_lines(_read("diff_buffer.txt")), git_hunks),
+		GitDiff.to_lines(_read("diff_head.txt")))
+
+	# a hunk that removes lines and adds none anchors NEW_START to the gap the removal sat in
+	# rather than to a line it covers — the same off-by-one hunks_to_markers and map_new_to_old
+	# already follow. diff_lines cannot produce one, since it always carries context lines.
+	var zero_context = """diff --git a/x.txt b/x.txt
+--- a/x.txt
++++ b/x.txt
+@@ -2,1 +1,0 @@
+-b
+"""
+	_check("a hunk that only removes anchors to its gap",
+		GitUtil.reverse_apply(GitDiff.to_lines("a\nc\n"),
+			GitUtil.parse_patch(zero_context, REPO)["res://x.txt"][GitUtil.Keys.HUNKS]),
+		GitDiff.to_lines("a\nb\nc\n"))
+
+	# and what get_file_at_head sees when the file it has open was deleted from disk under it
+	var whole_file = """diff --git a/x.txt b/x.txt
+--- a/x.txt
++++ /dev/null
+@@ -1,3 +0,0 @@
+-a
+-b
+-c
+"""
+	_check("a wholly deleted file reverses to its HEAD copy",
+		GitUtil.reverse_apply(GitDiff.to_lines(""),
+			GitUtil.parse_patch(whole_file, REPO)["res://x.txt"][GitUtil.Keys.HUNKS]),
+		GitDiff.to_lines("a\nb\nc\n"))
+
+	# what the one-hunk fixture cannot reach: several hunks in sequence, where the second's line
+	# numbers are already shifted by the first, and hunks that only add or only remove — a removal
+	# only hunk carries NEW_COUNT 0, so its NEW_START is a gap between lines, not a line
+	for pair in [
+		["a\nb\nc\nd\ne\nf\ng\nh\ni\n", "a\nB\nc\nd\ne\nf\ng\nh\nI\n"],
+		["a\nb\nc\n", "a\nc\n"],
+		["a\nc\n", "a\nb\nc\n"],
+		["a\nb\nc\n", ""],
+		["", "a\nb\nc\n"],
+		["a\nb\nc\n", "a\nb\nc\n"],
+	]:
+		var old_lines = GitDiff.to_lines(pair[0])
+		var new_lines = GitDiff.to_lines(pair[1])
+		_check("reverse of %s -> %s" % [pair[0].c_escape(), pair[1].c_escape()],
+			GitUtil.reverse_apply(new_lines, GitDiff.diff_lines(old_lines, new_lines)), old_lines)
 
 
 ## The one test that can catch the algorithm being wrong in a way that agrees with itself: the

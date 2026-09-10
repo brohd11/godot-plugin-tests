@@ -43,8 +43,9 @@ static func run_tests() -> Dictionary:
 	_test_pathspec()
 	_test_expand_rename()
 	_test_command_args()
-	_test_show_args()
+	_test_exists_args()
 	_test_check_ignore_args()
+	_test_unquote_escapes()
 	_test_find_repo_for()
 	_test_ignored_entries()
 	_test_ignored_covers()
@@ -548,19 +549,19 @@ static func _test_command_args() -> void:
 		["restore", "--", ":(literal)a.txt"])
 
 
-static func _test_show_args() -> void:
-	_check("show args", GitUtil.build_show_args(GitUtil.REV_HEAD, REPO, "res://plain.txt"),
-		["show", "HEAD:plain.txt"])
+static func _test_exists_args() -> void:
+	_check("exists args", GitUtil.build_exists_args(GitUtil.REV_HEAD, REPO, "res://plain.txt"),
+		["cat-file", "-e", "HEAD:plain.txt"])
 
 	# the path is relative to *its own* repo, not to the project
-	_check("show args from a nested repo",
-		GitUtil.build_show_args(GitUtil.REV_HEAD, "res://addons/lib/", "res://addons/lib/src/a.gd"),
-		["show", "HEAD:src/a.gd"])
+	_check("exists args from a nested repo",
+		GitUtil.build_exists_args(GitUtil.REV_HEAD, "res://addons/lib/", "res://addons/lib/src/a.gd"),
+		["cat-file", "-e", "HEAD:src/a.gd"])
 
 	# `<rev>:<path>` is a tree path and git does not glob it, so the pathspec prefix that every
 	# command arg carries would here become part of the filename git goes looking for
-	_check("show path is not a pathspec",
-		GitUtil.build_show_args(GitUtil.REV_HEAD, REPO, "res://plain.txt")[1].contains(
+	_check("exists path is not a pathspec",
+		GitUtil.build_exists_args(GitUtil.REV_HEAD, REPO, "res://plain.txt")[2].contains(
 			GitUtil.PATHSPEC_LITERAL), false)
 
 
@@ -582,6 +583,31 @@ static func _test_check_ignore_args() -> void:
 	_check("check-ignore separates its path",
 		GitUtil.build_check_ignore_args(REPO, "res://--weird.txt"),
 		["check-ignore", "-q", "--", "--weird.txt"])
+
+
+## git C-quotes a path byte over 0x7f as one \nnn per *byte*, so a non-ASCII name only survives if
+## the escapes are reassembled into UTF-8 rather than taken one codepoint each. Windows leans on
+## this: quoting keeps status output pure ASCII, the one encoding its pipe cannot mangle.
+static func _test_unquote_escapes() -> void:
+	var head = "1 .M N... 100644 100644 100644 aaa bbb "
+
+	_check("a two-byte escape rebuilds one character",
+		GitUtil.parse_status(head + '"caf\\303\\251.txt"', REPO)[GitUtil.Keys.FILES]
+			.has("res://café.txt"), true)
+
+	_check("a four-byte escape rebuilds one character",
+		GitUtil.parse_status(head + '"\\360\\237\\232\\200.txt"', REPO)[GitUtil.Keys.FILES]
+			.has("res://🚀.txt"), true)
+
+	# the rest of git's C escapes: \a and \v were falling through and emitting the bare letter
+	_check("the control escapes decode",
+		GitUtil.parse_status(head + '"bel\\a-vt\\v-ff\\f.txt"', REPO)[GitUtil.Keys.FILES]
+			.has("res://bel\u0007-vt\u000b-ff\u000c.txt"), true)
+
+	# git only quotes when it has to, so the unquoted path has to keep going through untouched
+	_check("an unquoted path is left alone",
+		GitUtil.parse_status(head + "café.txt", REPO)[GitUtil.Keys.FILES]
+			.has("res://café.txt"), true)
 
 
 static func _test_find_repo_for() -> void:
