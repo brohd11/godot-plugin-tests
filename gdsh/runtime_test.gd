@@ -33,6 +33,7 @@ func _run_tests():
 	_test_structured_completion()
 	_test_hidden_scopes()
 	_test_highlighting()
+	_test_script_highlighter_logic()
 	await _test_console()
 	print("GDSh: %d checks, %d failures" % [checks, failures])
 	quit(0 if failures == 0 else 1)
@@ -668,6 +669,43 @@ func _test_highlighting():
 	script_syntax.set_palette(palette)
 	equal(_highlight_color(edit, 0, 1), Color.MAGENTA, "script palette update clears multiline cache")
 	edit.queue_free()
+
+
+func _script_spans(map:Dictionary) -> Array:
+	var spans = []
+	for column in map:
+		spans.append([column, map[column].color.to_html()])
+	return spans
+
+
+func _test_script_highlighter_logic():
+	var logic = Sh.Console.ScriptHighlighter.Logic.new()
+	equal(logic.get_line_highlighting(0), {}, "unbound script logic returns no spans")
+	var palette = Sh.Console.Palette.new()
+	var edit = TextEdit.new()
+	var baseline = JSON.parse_string(FileAccess.get_file_as_string(FIXTURES + "script_highlighting.txt"))
+	for sample in baseline.cases:
+		# JSON numbers are floats; highlighting map columns are integers.
+		for spans in sample.lines:
+			for span in spans:
+				span[0] = int(span[0])
+		edit.text = sample.source
+		logic.setup(edit, palette)
+		for line in edit.get_line_count():
+			equal(_script_spans(logic.get_line_highlighting(line)), sample.lines[line], "script baseline line %d: %s" % [line, sample.source])
+		logic.clear_cache()
+		for line in range(edit.get_line_count() - 1, -1, -1):
+			equal(_script_spans(logic.get_line_highlighting(line)), sample.lines[line], "out-of-order script baseline line %d: %s" % [line, sample.source])
+	edit.text = 'echo "first\nsecond"'
+	logic.clear_cache()
+	equal(logic.get_line_highlighting(1)[0].color, palette.string, "script logic caches multiline quote state")
+	edit.text = "echo first\nsecond"
+	logic.clear_cache()
+	equal(logic.get_line_highlighting(1)[0].color, palette.function, "script logic cache clear reflects edited previous line")
+	var replacement = Sh.Console.Palette.new({"function": Color.RED})
+	logic.setup(edit, replacement)
+	equal(logic.get_line_highlighting(1)[0].color, Color.RED, "script logic accepts replacement palette directly")
+	edit.free()
 
 
 func _test_console():

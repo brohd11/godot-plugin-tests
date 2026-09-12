@@ -28,8 +28,8 @@ def main():
                 continue
             visited.add(source)
             rel = source.relative_to(repo)
-            if 'editor_console' in rel.parts or 'alib_editor' in rel.parts:
-                raise RuntimeError(f'Editor dependency: {rel}')
+            if not (rel.is_relative_to(module) or rel.is_relative_to('tests/gdsh')):
+                raise RuntimeError(f'External GDSh dependency: {rel}')
             dest = project / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, dest)
@@ -88,7 +88,7 @@ binary_format/architecture="x86_64"
             print(('PASS: project export' if '--export-pack' in command else 'PASS: project import') if quiet else re.sub(r'\x1b\[[0-9;]*m', '', result.stdout), flush=True)
             if result.returncode or 'SCRIPT ERROR:' in result.stdout or 'Parse Error:' in result.stdout:
                 return 1
-        print(f'PASS: runtime isolation; {len(visited)} scripts, no Editor Console/editor addon imports')
+        print(f'PASS: runtime isolation; {len(visited)} resources, only GDSh and its test fixtures')
         return 0
     finally:
         if not args.keep:
