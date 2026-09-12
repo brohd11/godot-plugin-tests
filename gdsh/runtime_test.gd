@@ -16,6 +16,14 @@ class InputProbe extends Node:
 		events.append(event)
 
 
+class FixedCompletion extends Sh.Completion:
+	var choices:Dictionary
+
+	func get_completions() -> Dictionary:
+		_parse()
+		return choices
+
+
 func _initialize():
 	_run_tests.call_deferred()
 
@@ -27,14 +35,18 @@ func _run_tests():
 	_test_redirection()
 	_test_syntax_errors()
 	_test_loading()
+	_test_fresh_user_commands()
 	_test_builtins()
 	_test_files()
 	_test_completion()
 	_test_structured_completion()
 	_test_hidden_scopes()
+	_test_host_extensions()
 	_test_highlighting()
+	_test_echo_formatting()
 	_test_script_highlighter_logic()
 	await _test_console()
+	await _test_console_path_completion()
 	print("GDSh: %d checks, %d failures" % [checks, failures])
 	quit(0 if failures == 0 else 1)
 
@@ -253,6 +265,50 @@ func _test_files():
 	DirAccess.remove_absolute(temp.path_join("child"))
 	DirAccess.remove_absolute(temp)
 
+func _write_file(path:String, text:String) -> void:
+	var file = FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(text)
+	file.close()
+
+func _test_fresh_user_commands():
+	var directory = "user://gdsh_fresh_command_test"
+	DirAccess.make_dir_recursive_absolute(directory)
+	var path = directory.path_join("fresh.gd")
+	var source = 'extends "res://addons/addon_lib/gdsh/command_base.gd"\n' \
+			+ 'static func get_command_name(): return "fresh"\n' \
+			+ 'static func get_self_command_data(): return _command_data({&"help": "fresh"})\n' \
+			+ 'func _execute(ctx): ctx.append_output("%s")\n'
+	_write_file(path, source % "first")
+	var ctx = session()
+	var script = Sh.Load.load_command(path)
+	ctx.scopes["fresh"] = {"script": script}
+	equal(run_text("fresh", Sh.Context.new_ctx("fresh", ctx)).stdout.strip_edges(), "first", "user command runs")
+	_write_file(path, source % "second")
+	equal(run_text("fresh", Sh.Context.new_ctx("fresh", ctx)).stdout.strip_edges(), "second", "commands outside res:// reload on use")
+	check(Sh.Load.fresh(script).new() is Sh.CommandBase, "reloaded user command keeps the shared base class")
+	check(Sh.Load.fresh(Sh.Load.load_command(COMMANDS + "probe.gd")) == Sh.Load.load_command(COMMANDS + "probe.gd"), "res:// commands stay cached")
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(directory)
+
+func _test_echo_formatting():
+	var ctx = session()
+	ctx.variables["$NAME"] = "world"
+	ctx.aliases["@d"] = "door open"
+	var syntax = Sh.Console.Highlighter.new()
+	syntax.set_context(ctx)
+	var plain = syntax.to_bbcode("probe [x]")
+	check(plain.contains("[color=%s]probe[/color]" % syntax.palette.scope.to_html(false)), "echo colors command scopes")
+	check(plain.contains("[lb]x]") and not plain.contains("[x]"), "echo escapes BBCode in the command")
+	var tags = RegEx.create_from_string("\\[/?color[^\\]]*\\]")
+	var shown = tags.sub(syntax.to_bbcode("echo $NAME $MISSING @d", true), "", true).replace("[lb]", "[")
+	equal(shown, "echo [world]$NAME [undef]$MISSING [door open]@d", "echo previews variable and alias values")
+	equal(tags.sub(syntax.to_bbcode("echo $NAME"), "", true), "echo $NAME", "echo previews are optional")
+	var counter = Sh.Load.load_command(COMMANDS + "counter.gd")
+	counter.calls = 0
+	ctx.variables["$SUB"] = "$(counter)"
+	syntax.to_bbcode("echo $(counter) $SUB", true)
+	equal(counter.calls, 0, "echo previews never evaluate substitutions")
+
 func complete(text:String, ctx:Sh.Context=null, caret:int=-1):
 	if ctx == null:
 		ctx = session()
@@ -276,7 +332,11 @@ func _test_completion():
 	check(complete("$TARGET ", ctx).has("open"), "variable routing")
 	check(complete("@d ", ctx).has("open"), "alias routing")
 	check(complete("echo $T", ctx).has("$TARGET"), "variable suggestions")
-	check(complete("@", ctx).has("@d"), "alias suggestions")
+	check(complete("@", ctx).has("@d = [door]"), "alias suggestions show their source")
+	equal(complete("@", ctx)["@d = [door]"][Sh.Options.Keys.METADATA][Sh.Options.Keys.INSERT], "@d", "alias suggestion inserts the name")
+	ctx.functions["greet"] = "echo hi"
+	check(complete("", ctx).has("greet[func]"), "function suggestions are tagged")
+	ctx.functions.erase("greet")
 	ctx.cwd = COMMANDS
 	check(complete("cd ", ctx).has("door"), "directory suggestions")
 	check(complete("probe --file=", ctx).has(COMMANDS + "probe.gd"), "file flag suggestions")
@@ -885,12 +945,138 @@ func _test_console():
 	console.input._hide_completion()
 	await process_frame
 	check(not console.input._popup.visible, "stale completion measurement cannot reopen a hidden popup")
+	console.input.text = "pro"
+	console.input.set_caret_column(3)
+	await console.input.request_completion(true)
+	var left = InputEventKey.new()
+	left.keycode = KEY_LEFT
+	left.pressed = true
+	console.input._on_gui_input(left)
+	check(not console.input._popup.visible, "left arrow closes the completion popup")
+	console.input.text = "cmd ./addons/foo"
+	console.input.set_caret_column(console.input.text.length())
+	console.input.delete_word_before_caret()
+	equal(console.input.text, "cmd ./addons/", "word deletion stops at a path separator")
+	console.input.delete_word_before_caret()
+	equal(console.input.text, "cmd ./", "word deletion includes a trailing delimiter")
+	var word_delete = InputEventKey.new()
+	word_delete.keycode = KEY_BACKSPACE
+	word_delete.ctrl_pressed = true
+	word_delete.pressed = true
+	console.input.text = "echo one"
+	console.input.set_caret_column(8)
+	console.input._on_gui_input(word_delete)
+	equal(console.input.text, "echo ", "ctrl+backspace deletes the previous word")
+	console.input._timer.stop()
+	check(console.format_command("echo one").begins_with("[color="), "console formats echoed commands with input colors")
 	console.input.text = "echo one\necho two"
 	console.input._on_text_changed() # Programmatic assignment does not emit TextEdit.text_changed.
 	equal(console.input.get_line_count(), 1, "console input remains one line after pasted newlines")
 	check(console.input.syntax_highlighter != null, "console input installs runtime syntax highlighting")
 	await _test_console_input_consumption(console, transcript)
 	console.queue_free()
+
+
+func _accept_console_choice(input, prefix:String, choice:String, expected:String, suffix:String="") -> void:
+	input.text = prefix + suffix
+	input.set_caret_column(prefix.length())
+	await input.request_completion(true)
+	check(input._popup != null and input._popup.visible, "path popup visible: " + prefix)
+	if input._popup == null or not input._popup.visible:
+		return
+	var index = input._popup._choices.find(choice)
+	check(index >= 0, "path choice survives filtering: " + prefix + " -> " + choice)
+	if index < 0:
+		return
+	input._popup._items.select(index)
+	input._popup.accept_selected()
+	input._timer.stop()
+	equal(input.text, expected + suffix, "completion preserves path and surrounding text")
+	equal(input.get_caret_column(), expected.length(), "completion caret follows inserted path")
+
+
+func _test_console_path_completion() -> void:
+	# Use a real directory even when res:// belongs to a packed export.
+	var temp_dir = OS.get_environment("TEMP" if OS.get_name() == "Windows" else "TMPDIR")
+	if temp_dir.is_empty():
+		temp_dir = ProjectSettings.globalize_path("user://") if OS.get_name() == "Windows" else "/tmp"
+	var fixture = temp_dir.path_join("gdsh-completion-%s" % Time.get_ticks_usec())
+	var library = fixture + "/Library"
+	for path in [library + "/Child", fixture + "/Elsewhere"]:
+		equal(DirAccess.make_dir_recursive_absolute(path), OK, "create completion fixture")
+	var ctx = session()
+	ctx.cwd = fixture
+	var console = Sh.Console.new(ctx)
+	root.add_child(console)
+	var input = console.input
+	var absolute = ProjectSettings.globalize_path(fixture)
+	for prefix in ["./", "./L", "./lb", absolute + "/", absolute + "/L"]:
+		var base = prefix.left(prefix.rfind("/") + 1)
+		await _accept_console_choice(input, "cd " + prefix, "Library", "cd " + base + "Library/")
+	await _accept_console_choice(input, "cd L", "Library", "cd Library/")
+	await _accept_console_choice(input, "cd ./Library/", "Child", "cd ./Library/Child/")
+	await _accept_console_choice(input, "cd ./Library/Ch", "Child", "cd ./Library/Child/")
+	await _accept_console_choice(input, "echo before; cd ./L", "Library", "echo before; cd ./Library/", " ; echo after")
+	ctx.cwd = library
+	await _accept_console_choice(input, "cd ../", "Library", "cd ../Library/")
+	await _accept_console_choice(input, "cd ../L", "Library", "cd ../Library/")
+	ctx.cwd = fixture
+	await _accept_console_choice(input, "cd ./", "..", "cd ./../")
+	await _accept_console_choice(input, "cd res://", "tests", "cd res://tests/")
+	if absolute.begins_with("/"):
+		# Some ancestors of the temporary directory are hidden (e.g. macOS /private).
+		var root_dirs = DirAccess.get_directories_at("/")
+		check(not root_dirs.is_empty(), "root has visible directories to complete")
+		if not root_dirs.is_empty():
+			var root_child = root_dirs[0]
+			await _accept_console_choice(input, "cd /", root_child, "cd /" + root_child + "/")
+			await _accept_console_choice(input, "cd /" + root_child.left(1), root_child, "cd /" + root_child + "/")
+	for prefix in ["./NoMatch", "./Missing/", absolute + "/NoMatch"]:
+		input.text = "cd " + prefix
+		input.set_caret_column(input.text.length())
+		await input.request_completion(true)
+		check(not input._popup.visible, "unmatched paths hide popup: " + prefix)
+
+	var options = Sh.Options.new()
+	options.add_separator("Empty")
+	options.add_separator("Commands")
+	options.add_option("Display", {&"insert": "replacement"})
+	options.add_separator("Other")
+	options.add_option("unrelated")
+	options.add_separator("Trailing")
+	input.completion_factory = func(text, context, caret):
+		var request = FixedCompletion.new(text, context, caret)
+		request.choices = options.get_options()
+		return request
+	for needle in ["Di", "rp"]:
+		input.text = needle
+		input.set_caret_column(needle.length())
+		await input.request_completion(true)
+		equal(input._popup._items.item_count, 2, "filter keeps matching choice and its group")
+		equal(input._popup._items.get_item_text(0), "── Commands ──", "group label survives text filtering")
+		check(input._popup._items.is_item_disabled(0), "separator cannot be selected")
+		input._popup.accept_selected()
+		input._timer.stop()
+		equal(input.text, "replacement ", "matching label or insertion accepts custom insertion")
+	input.text = ""
+	input.set_caret_column(0)
+	await input.request_completion(true)
+	equal(input._popup._items.item_count, 4, "cleanup also runs with an empty filter")
+	input.text = "missing"
+	input.set_caret_column(input.text.length())
+	await input.request_completion(true)
+	check(not input._popup.visible, "empty groups hide popup")
+	options.remove_option("Display")
+	options.remove_option("unrelated")
+	input.text = ""
+	input.set_caret_column(0)
+	await input.request_completion(true)
+	check(not input._popup.visible, "separator-only results hide popup")
+	input.completion_factory = Callable()
+	await _accept_console_choice(input, "pro", "probe", "probe ")
+	console.free()
+	for path in [library + "/Child", library, fixture + "/Elsewhere", fixture]:
+		equal(DirAccess.remove_absolute(path), OK, "remove completion fixture")
 
 
 func _test_console_input_consumption(console, transcript:RichTextLabel) -> void:
@@ -972,3 +1158,57 @@ func _test_console_input_consumption(console, transcript:RichTextLabel) -> void:
 	check(transcript.mouse_filter == Control.MOUSE_FILTER_STOP, "transcript stops mouse events")
 	check(not transcript.mouse_force_pass_scroll_events, "transcript does not force scroll events to pass")
 	probe.queue_free()
+
+func _test_host_extensions():
+	var raw = Sh.Load.load_command(FIXTURES + "raw/raw.gd")
+	var ctx = session()
+	ctx.scopes_hidden["raw"] = {"script": raw}
+	var unregistered = Sh.Context.new_ctx("routed raw", ctx)
+	var routed = run_text("raw one", unregistered)
+	check(routed.exit_code != 0 and routed.stderr.contains("takes raw arguments"), "raw command outside command position reports usage")
+	ctx.collect_raw_commands()
+	equal(Array(ctx.raw_commands), ["raw"], "raw names collected from command data")
+	check(Sh.Context.new_ctx("child", ctx).raw_commands == ctx.raw_commands, "child contexts share raw names")
+	check(run_text("raw 'open", Sh.Context.new_ctx("unclosed", ctx)).stderr.contains("Unclosed raw command argument"), "unclosed raw quote reports an error")
+	check(run_text("raw (open", Sh.Context.new_ctx("unclosed", ctx)).stderr.contains("Unclosed raw argument group"), "unclosed raw group reports an error")
+	ctx.host_data["binding"] = "host"
+	var resolver = func(name, request):
+		if name == "fallback":
+			check(request.host_data.get("binding") == "host", "host bindings inherited")
+			return request.scopes.get("counter")
+		return null
+	ctx.scope_resolver = resolver
+	for row in [
+		["raw $value $$(native ${syntax})", "$value $$(native ${syntax})"],
+		["raw 'a | b' | sink", "stdin:'a | b'"],
+		["if true { raw one }", "one"],
+		["f(){ raw two }; f", "two"],
+		["(raw three)", "three"],
+		["echo $(raw four)", "four"],
+		["alias @r = raw five; @r", "five"],
+		["raw six 2>discard", "six"],
+		["raw one >discard two | sink", "stdin:"],
+		["2>discard raw before", "before"],
+		['raw "$$(printf "a | b")"', '"$$(printf "a | b")"'],
+	]:
+		var result = Sh.Context.new_ctx("host test", ctx)
+		run_text(row[0], result)
+		equal(result.stdout.strip_edges(), row[1], "raw host command: " + row[0])
+		equal(result.exit_code, 0, "raw status: " + row[0])
+	raw.calls = 0
+	run_text("false && raw $(counter)", Sh.Context.new_ctx("skip", ctx))
+	equal(raw.calls, 0, "raw handler stays lazy in skipped branch")
+	check(Sh.Completion.new("raw $$(unknown ", ctx).get_completions().has("raw:$$(unknown "), "raw completion sees source")
+	equal(raw.calls, 0, "raw completion never executes")
+	var result = run_text("raw fail || echo recovered", Sh.Context.new_ctx("failure", ctx))
+	equal(result.stdout.strip_edges(), "fail\nrecovered", "raw failure drives logical branch")
+	check(result.stderr.contains("raw diagnostic"), "raw stderr captured")
+	check(run_text("fallback", Sh.Context.new_ctx("resolver", ctx)).exit_code == 0, "fallback resolver dispatch")
+	check(run_text("(fallback)", Sh.Context.new_ctx("resolver subshell", ctx)).exit_code == 0, "fallback resolver survives subshell")
+	Sh.Completion.new("fallback ", ctx).get_completions()
+	var override = ctx.scopes["probe"]
+	ctx.scopes["fallback"] = override
+	check(ctx.get_scope("fallback") == override, "registered scope precedes resolver")
+	var child = Sh.Context.new_ctx("child", ctx, true)
+	child.host_data["binding"] = "other"
+	equal(ctx.host_data.binding, "host", "host binding dictionaries are independent")
