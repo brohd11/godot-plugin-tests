@@ -13,6 +13,8 @@ func _get_flags() -> Dictionary:
 	var options = Options.new()
 	options.add_option("--mode=")
 	options.add_option("--loud")
+	options.add_option("--class=", {&"flag_completion": {"type": FlagType.CLASS}})
+	options.add_option("--user-class=", {&"flag_completion": {"type": FlagType.USER_CLASS}})
 	options.add_option("--file=", {&"flag_completion": {"type": FlagType.FILE, "dir": "res://tests/gdsh/fixtures/commands/", "ext": ["gd"]}})
 	options.add_option("--dir=", {&"flag_completion": {"type": FlagType.DIR, "dir": "res://tests/gdsh/fixtures/commands/"}})
 	options.show_variables()

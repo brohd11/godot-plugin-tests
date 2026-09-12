@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Sh = preload("res://addons/addon_lib/gdsh/gdsh.gd")
+const Utils = preload("res://addons/addon_lib/gdsh/internal/utils.gd")
 const FIXTURES = "res://tests/gdsh/fixtures/"
 const COMMANDS = FIXTURES + "commands/"
 const OVERRIDES = FIXTURES + "overrides/"
@@ -20,11 +21,13 @@ func _initialize():
 
 
 func _run_tests():
+	_test_utils()
 	_test_execution()
 	_test_grammar()
 	_test_redirection()
 	_test_syntax_errors()
 	_test_loading()
+	_test_builtins()
 	_test_files()
 	_test_completion()
 	_test_structured_completion()
@@ -54,6 +57,37 @@ func run_text(text:String, ctx:Sh.Context=null):
 
 func output(text:String):
 	return run_text(text).stdout.strip_edges()
+
+func _test_utils():
+	for sample in [
+		["plain", "plain", false],
+		["", "", false],
+		["'two words'", "two words", true],
+		['"two words"', "two words", true],
+		['&"named"', "named", true],
+		["&'named'", "named", true],
+		['r"raw"', 'r"raw"', true],
+		['"unfinished', '"unfinished', false],
+		["&plain", "&plain", false],
+	]:
+		equal(Utils.unquote(sample[0]), sample[1], "local unquote: " + sample[0])
+		equal(Utils.is_string_or_string_name(sample[0]), sample[2], "local string detection: " + sample[0])
+	var commands = {"default": {}, "late": {&"priority": 2000}, "early": {&"priority": 1}}
+	var sorted = Utils.sort_dict_with_priority_key(commands, &"priority")
+	equal(sorted.keys(), ["early", "default", "late"], "local priority sort includes default priority")
+	equal(commands.keys(), ["default", "late", "early"], "priority sort preserves input order")
+	equal(sorted["early"], commands["early"], "priority sort preserves metadata")
+	equal(Utils.sort_dict_with_priority_key({}, &"priority"), {}, "empty priority sort")
+	var classes = Utils.get_all_global_class_paths()
+	equal(classes.size(), ProjectSettings.get_global_class_list().size(), "local class enumeration includes every registered class")
+	for entry in ProjectSettings.get_global_class_list():
+		equal(classes.get(entry["class"]), entry["path"], "local class enumeration path: " + entry["class"])
+	classes.clear()
+	check(Utils.get_all_global_class_paths().has("GDSh"), "class enumeration returns a fresh dictionary")
+	check(complete("probe --class=").has("Node"), "class completion includes native classes")
+	check(complete("probe --class=").has("GDSh"), "class completion includes registered classes")
+	var user_classes = complete("probe --user-class=")
+	check(user_classes.has("GDSh") and not user_classes.has("Node"), "user class completion uses local enumeration")
 
 func _test_execution():
 	equal(output("echo hello"), "hello", "echo")
@@ -113,7 +147,7 @@ func _test_loading():
 	custom.scopes[script.get_command_name()] = {"script": script}
 	equal(run_text("probe", custom).stdout.strip_edges(), "default:false::", "manual registration")
 	var builtins = Sh.Load.load_builtins()
-	equal(builtins.size(), 15, "builtin manifest")
+	equal(builtins.size(), 16, "builtin manifest includes parent")
 	check(builtins.has("help"), "help is a builtin")
 	for name in ["os", "clear", "global", "cat", "pwd"]:
 		check(not builtins.has(name), "excluded command: " + name)
@@ -123,6 +157,64 @@ func _test_loading():
 	var duplicates = Sh.Load.load_directory(FIXTURES + "duplicates/")
 	equal(duplicates.size(), 1, "duplicates reported and skipped")
 	equal(duplicates.duplicate.script.resource_path, FIXTURES + "duplicates/a.gd", "deterministic first registration")
+
+func _test_builtins():
+	var ctx = Sh.Context.new()
+	check(ctx.scopes_hidden.has("builtins") and ctx.scopes.is_empty(), "builtin parent is hidden")
+	for text in ["", "bui"]:
+		var choices = complete(text, ctx)
+		check(not choices.has("builtins") and not choices.has("echo"), "builtins omitted from root completion: " + text)
+	var public_names = ["break", "continue", "return", "exit", "shift", "true", "false", "[", "expr", "echo", "source", "cd", "help"]
+	var choices = complete("builtins ", ctx)
+	var children = ctx.get_scope("builtins").script.new().get_commands()
+	equal(children.size(), public_names.size(), "parent discovers only public builtins")
+	for name in public_names:
+		check(children.has(name) and choices.has(name), "builtin child routing and completion: " + name)
+	for name in ["__function__", "__run_script__"]:
+		check(ctx.scopes_hidden.has(name) and not choices.has(name), "internal builtin remains registered but is not suggested: " + name)
+	check(complete("builtins ec", ctx).has("echo"), "partial builtin child completion")
+	ctx.cwd = COMMANDS
+	check(complete("builtins cd ", ctx).has("door"), "builtin child delegates directory completion")
+
+	var listing = run_text("builtins")
+	equal(listing.exit_code, 0, "bare builtins succeeds")
+	check(listing.stdout.contains("Subcommands:"), "bare builtins lists children")
+	for name in public_names:
+		check((listing.stdout + "\n").contains("\n  " + name + "\n"), "builtin listing includes: " + name)
+	check(not listing.stdout.contains("__function__") and not listing.stdout.contains("__run_script__"), "builtin help omits internals")
+	equal(run_text("builtins --help").stdout, listing.stdout, "explicit parent help matches listing")
+	equal(run_text("builtins echo --help").stdout, run_text("echo --help").stdout, "namespaced child help")
+	check(run_text("help").stdout.contains("\n  builtins\n"), "help lists hidden parent")
+	equal(run_text("builtins unknown").exit_code, 1, "invalid builtin child fails")
+	equal(output("builtins echo hello"), "hello", "namespaced echo")
+	equal(output("builtins echo first | sink"), "stdin:first", "namespaced pipeline")
+	equal(run_text("builtins true").exit_code, 0, "namespaced true status")
+	equal(run_text("builtins false").exit_code, 1, "namespaced false status")
+	equal(run_text("builtins [ a == a ]").exit_code, 0, "namespaced comparison succeeds")
+	equal(run_text("builtins [ a == b ]").exit_code, 1, "namespaced comparison fails")
+	equal(output("for item in a b { builtins echo $item; builtins break }"), "a", "namespaced break")
+	equal(output("for item in a b { builtins echo $item; builtins continue; echo no }"), "a\nb", "namespaced continue")
+	equal(output("f(){ builtins shift; echo $1; builtins return 3; echo no }; f a b; echo $?"), "b\n3", "namespaced shift and return")
+	var exited = run_text("builtins exit 7; echo no")
+	equal(exited.exit_code, 7, "namespaced exit status")
+	check(exited.stdout.is_empty(), "namespaced exit stops execution")
+	run_text("builtins cd door", ctx)
+	equal(ctx.cwd, COMMANDS.path_join("door"), "namespaced cd propagates cwd")
+	equal(output("builtins source tests/gdsh/fixtures/hello.gdsh"), "resource script", "namespaced source")
+
+	ctx = Sh.Context.new()
+	ctx.load(OVERRIDES)
+	equal(run_text("echo hi", ctx).stdout.strip_edges(), "layered:hi", "root builtin override executes")
+	ctx.stdout = ""
+	equal(run_text("builtins echo hi", ctx).stdout.strip_edges(), "hi", "namespaced builtin bypasses root override")
+	var independent = Sh.Context.new()
+	ctx.scopes_hidden.erase("builtins")
+	check(independent.has_scope("builtins"), "independent builtin parent registration")
+	var child = Sh.Context.new_ctx("child", independent)
+	child.scopes_hidden.erase("builtins")
+	check(independent.has_scope("builtins"), "child parent registration is independent")
+	var empty = Sh.Context.new("", false)
+	check(empty.scopes.is_empty() and empty.scopes_hidden.is_empty(), "context without builtins has no registrations")
 
 func _write(path:String, text:String):
 	var file = FileAccess.open(path, FileAccess.WRITE)
@@ -596,6 +688,8 @@ func _test_console():
 	var one_item_height = console.input._popup.custom_minimum_size.y
 	console.input._popup.accept_selected()
 	check(console.input.text.begins_with("probe"), "console completion inserts the selected command")
+	# Accepting a choice schedules completion; the sizing checks issue their own requests.
+	console.input._timer.stop()
 	console.input.text = "door "
 	console.input.set_caret_column(console.input.text.length())
 	await console.input.request_completion(true)
