@@ -32,6 +32,7 @@ func _run_tests():
 	_test_completion()
 	_test_structured_completion()
 	_test_hidden_scopes()
+	_test_highlighting()
 	await _test_console()
 	print("GDSh: %d checks, %d failures" % [checks, failures])
 	quit(0 if failures == 0 else 1)
@@ -560,11 +561,142 @@ func _test_hidden_scopes():
 	equal(run_text("help extra", ctx).exit_code, 1, "help accepts no positional arguments")
 
 
+func _highlight_color(edit:CodeEdit, column:int, line:int=0) -> Color:
+	var spans = edit.syntax_highlighter.get_line_syntax_highlighting(line)
+	var color = Color.TRANSPARENT
+	for start in spans:
+		if start > column:
+			break
+		color = spans[start].color
+	return color
+
+
+func _check_highlight(edit:CodeEdit, text:String, fragment:String, color:Color, label:String):
+	edit.text = text
+	var start = text.find(fragment)
+	check(start >= 0, label + " has sample fragment")
+	for column in range(start, start + fragment.length()):
+		equal(_highlight_color(edit, column), color, label + " column " + str(column))
+
+
+func _test_highlighting():
+	var palette = Sh.Console.Palette.new({"scope": Color.RED, &"variable": Color.GREEN})
+	equal(palette.scope, Color.RED, "palette constructor overrides a string key")
+	equal(palette.variable, Color.GREEN, "palette constructor overrides a StringName key")
+	equal(palette.text, Sh.Console.Palette.new().text, "palette retains unspecified defaults")
+	print("Expected palette diagnostics follow:")
+	var invalid = Sh.Console.Palette.new({"missing": Color.RED, "text": 1, "alias": Color.BLUE})
+	equal(invalid.text, palette.text, "invalid palette value retains default")
+	equal(invalid.alias, Color.BLUE, "valid overrides survive invalid entries")
+	var ctx = session()
+	ctx.variables["$KNOWN"] = "value"
+	ctx.functions["probe"] = "echo function"
+	ctx.aliases["@p"] = "probe"
+	ctx.set_positional_args("test", ["argument"])
+	var syntax = Sh.Console.Highlighter.new()
+	syntax.set_context(ctx)
+	syntax.set_palette(palette)
+	var edit = CodeEdit.new()
+	edit.syntax_highlighter = syntax
+	root.add_child(edit)
+	check(not syntax.highlight_globals, "global highlighting defaults off")
+	_check_highlight(edit, "builtins echo hello", "builtins", palette.scope, "hidden parent highlighted")
+	_check_highlight(edit, "builtins echo hello", "echo", palette.scope, "hidden command highlighted")
+	_check_highlight(edit, "probe arg", "probe", palette.function_def, "function shadows command color")
+	_check_highlight(edit, "@p arg", "@p", palette.alias, "context alias highlighted")
+	_check_highlight(edit, "echo $KNOWN", "$KNOWN", palette.variable, "known variable")
+	_check_highlight(edit, "echo $MISSING", "$MISSING", palette.unknown_variable, "unknown variable")
+	for name in ["$0", "$1", "$?", "$#", "$@"]:
+		_check_highlight(edit, "echo " + name, name, palette.variable, "special/positional variable " + name)
+	_check_highlight(edit, "echo $2", "$2", palette.unknown_variable, "missing positional variable")
+	for text in ["echo 'echo $KNOWN >'", 'echo "echo"', "echo \\$KNOWN", "echo \\>", "echo # echo $KNOWN >", "echo echox"]:
+		edit.text = text
+		for column in range(5, text.length()):
+			equal(_highlight_color(edit, column), palette.text, "literal/comment stays plain: " + text)
+	_check_highlight(edit, 'echo "value:$KNOWN"', "$KNOWN", palette.variable, "double quote interpolation")
+	_check_highlight(edit, 'echo "$(echo $(echo $KNOWN))"', "$KNOWN", palette.variable, "nested substitution variable")
+	_check_highlight(edit, 'echo "$(echo $(echo $KNOWN))"', "$(", palette.symbol, "substitution delimiter")
+	_check_highlight(edit, "echo $(probe", "probe", palette.function_def, "incomplete substitution")
+	_check_highlight(edit, 'echo "$KNOWN', "$KNOWN", palette.variable, "incomplete quote")
+	for op in ["<", "0<", ">", "1>", ">>", "1>>", "2>", "2>>", "&>", "&>>", "<<", ">&", "<&"]:
+		_check_highlight(edit, "echo hi " + op + "file", op, palette.symbol, "redirection " + op)
+	_check_highlight(edit, "echo hi>file", ">", palette.symbol, "adjacent redirection")
+	_check_highlight(edit, "echo hi 2 >file", "2", palette.text, "separated descriptor is an argument")
+	for op in ["&&", "||", "|", ";", "(", ")", "{", "}"]:
+		_check_highlight(edit, "echo" + op + "echo", op, palette.symbol, "adjacent shell operator " + op)
+	for op in ["[", "]", "==", "!="]:
+		_check_highlight(edit, "echo " + op, op, palette.symbol, "comparison " + op)
+	equal(run_text("echo hi <<file").exit_code, Sh.Context.ExitCode.ERR, "highlighted unsupported redirect remains rejected")
+	edit.text = "GDSh.Execute"
+	equal(_highlight_color(edit, 0), palette.text, "globals plain by default")
+	syntax.highlight_globals = true
+	equal(_highlight_color(edit, 0), palette.global_class, "globals enabled invalidates cache")
+	equal(_highlight_color(edit, 4), palette.text, "global member suffix stays plain")
+	syntax.highlight_globals = false
+	equal(_highlight_color(edit, 0), palette.text, "globals disabled invalidates cache")
+	edit.text = "echo"
+	palette.scope = Color.BLUE
+	syntax.set_palette(palette)
+	equal(_highlight_color(edit, 0), Color.BLUE, "palette replacement invalidates colors")
+	check(Sh.Console.Highlighter.new().palette.scope != Color.BLUE, "default palettes are independent")
+	syntax.set_context(Sh.Context.new("", false))
+	equal(_highlight_color(edit, 0), palette.text, "context replacement invalidates names")
+	syntax.set_context(ctx)
+	ctx.variables["$KNOWN"] = "$(counter)"
+	var counter = Sh.Load.load_command(COMMANDS + "counter.gd")
+	counter.calls = 0
+	ctx.stdout = "saved output"
+	ctx.stderr = "saved error"
+	ctx.last_status = 7
+	var variables = ctx.variables.duplicate(true)
+	_check_highlight(edit, "echo $(counter) $KNOWN @p", "counter", palette.scope, "substitution command highlighted")
+	equal(counter.calls, 0, "highlighting never executes substitutions")
+	equal(ctx.variables, variables, "highlighting preserves variables")
+	equal(ctx.stdout, "saved output", "highlighting preserves stdout")
+	equal(ctx.stderr, "saved error", "highlighting preserves stderr")
+	equal(ctx.last_status, 7, "highlighting preserves status")
+	edit.text = "echo 'literal\necho $KNOWN'\necho $KNOWN"
+	equal(_highlight_color(edit, 0, 1), palette.text, "console scanning respects multiline literal state")
+	equal(_highlight_color(edit, 0, 2), palette.scope, "console scanning resumes after multiline literal")
+	var script_syntax = Sh.Console.ScriptHighlighter.new()
+	script_syntax.set_palette(palette)
+	edit.syntax_highlighter = script_syntax
+	_check_highlight(edit, 'echo "text"', "text", palette.string, "script option colors string literals")
+	edit.text = 'echo "first\nsecond"\necho'
+	equal(_highlight_color(edit, 0, 1), palette.string, "script option preserves multiline state")
+	palette.string = Color.MAGENTA
+	script_syntax.set_palette(palette)
+	equal(_highlight_color(edit, 0, 1), Color.MAGENTA, "script palette update clears multiline cache")
+	edit.queue_free()
+
+
 func _test_console():
 	# Give the popup enough vertical room to test both natural resizing and its cap.
 	root.size = Vector2i(640, 480)
 	var console = Sh.Console.new()
+	var selected_syntax = Sh.Console.Highlighter.new()
+	console.set_highlighter(selected_syntax)
 	root.add_child(console)
+	check(console.input.syntax_highlighter == selected_syntax, "pre-tree highlighter selection persists")
+	check(selected_syntax.context == console.context, "console binds highlighter context")
+	console.input.text = "probe"
+	equal(_highlight_color(console.input, 0), selected_syntax.palette.text, "unloaded command is plain")
+	console.load(COMMANDS + "probe.gd")
+	equal(_highlight_color(console.input, 0), selected_syntax.palette.scope, "loading commands refreshes highlighting")
+	console.input.text = "$HIGHLIGHT_TEST"
+	equal(_highlight_color(console.input, 0), selected_syntax.palette.unknown_variable, "undefined variable is unknown")
+	console.execute("HIGHLIGHT_TEST=value")
+	equal(_highlight_color(console.input, 0), selected_syntax.palette.variable, "execution refreshes variable highlighting")
+	console.set_context(Sh.Context.new())
+	equal(_highlight_color(console.input, 0), selected_syntax.palette.unknown_variable, "console context replacement refreshes highlighting")
+	console.clear_history()
+	console.input.text = ""
+	var script_option = Sh.Console.ScriptHighlighter.new()
+	console.set_highlighter(script_option)
+	check(console.input.syntax_highlighter == script_option, "console accepts script highlighter")
+	console.set_highlighter(SyntaxHighlighter.new())
+	check(console.input.syntax_highlighter != selected_syntax, "console accepts native highlighters")
+	console.set_highlighter(selected_syntax)
 	check(console is VBoxContainer, "console is an instantiable VBoxContainer")
 	check(console.prompt_row is HBoxContainer, "console exposes its prompt row")
 	check(console.prompt_label is RichTextLabel, "console exposes its prompt label")
