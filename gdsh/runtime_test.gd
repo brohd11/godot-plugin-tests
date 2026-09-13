@@ -37,6 +37,8 @@ func _run_tests():
 	_test_loading()
 	_test_fresh_user_commands()
 	_test_builtins()
+	_test_hidden()
+	_test_clear()
 	_test_files()
 	_test_completion()
 	_test_structured_completion()
@@ -161,9 +163,10 @@ func _test_loading():
 	custom.scopes[script.get_command_name()] = {"script": script}
 	equal(run_text("probe", custom).stdout.strip_edges(), "default:false::", "manual registration")
 	var builtins = Sh.Load.load_builtins()
-	equal(builtins.size(), 16, "builtin manifest includes parent")
-	check(builtins.has("help"), "help is a builtin")
-	for name in ["os", "clear", "global", "cat", "pwd"]:
+	equal(builtins.size(), 18, "builtin manifest includes namespaces")
+	check(builtins.has("help") and builtins.has("clear"), "help and clear are builtins")
+	check(builtins.has("builtins") and builtins.has("hidden"), "builtins and hidden namespaces are registered")
+	for name in ["os", "global", "cat", "pwd"]:
 		check(not builtins.has(name), "excluded command: " + name)
 	print("Expected loader diagnostics follow:")
 	check(Sh.Load.load_command(FIXTURES + "missing.gd") == null, "missing command")
@@ -178,7 +181,7 @@ func _test_builtins():
 	for text in ["", "bui"]:
 		var choices = complete(text, ctx)
 		check(not choices.has("builtins") and not choices.has("echo"), "builtins omitted from root completion: " + text)
-	var public_names = ["break", "continue", "return", "exit", "shift", "true", "false", "[", "expr", "echo", "source", "cd", "help"]
+	var public_names = ["break", "continue", "return", "exit", "shift", "true", "false", "[", "expr", "echo", "source", "cd", "help", "hidden", "clear"]
 	var choices = complete("builtins ", ctx)
 	var children = ctx.get_scope("builtins").script.new().get_commands()
 	equal(children.size(), public_names.size(), "parent discovers only public builtins")
@@ -221,12 +224,46 @@ func _test_builtins():
 	equal(run_text("echo hi", ctx).stdout.strip_edges(), "layered:hi", "root builtin override executes")
 	ctx.stdout = ""
 	equal(run_text("builtins echo hi", ctx).stdout.strip_edges(), "hi", "namespaced builtin bypasses root override")
+
+func _test_hidden():
+	var ctx = Sh.Context.new()
+	check(ctx.scopes_hidden.has("hidden") and ctx.scopes.is_empty(), "hidden parent is a hidden builtin")
+	var parent = ctx.get_scope("hidden").script.new()
+	parent._initialize(ctx)
+	equal(parent.get_commands().keys(), ["builtins"], "hidden lists only discoverable hidden scopes by default")
+	var choices = complete("hidden ", ctx)
+	check(choices.has("builtins"), "hidden completes discoverable namespaces")
+	for name in ["echo", "cd", "help", "clear", "__function__", "hidden"]:
+		check(not choices.has(name), "hidden omits non-discoverable or internal command: " + name)
+	check(complete("hidden builtins ", ctx).has("echo"), "namespaces list non-discoverable children")
+	equal(output("hidden builtins echo hello"), "hello", "hidden routes through a namespace")
+	var listing = run_text("hidden").stdout + "\n"
+	check(listing.contains("\n  builtins\n") and not listing.contains("\n  echo\n"), "bare hidden lists discoverable children")
+	var help_text = run_text("help").stdout + "\n"
+	check(help_text.contains("\n  builtins\n") and help_text.contains("\n  hidden\n") and not help_text.contains("\n  echo\n"), "help omits non-discoverable commands")
+	equal(output("echo direct"), "direct", "non-discoverable commands still run directly")
+
+	var visible = session()
+	visible.scopes["quiet"] = {"script": Sh.Load.load_command(FIXTURES + "quiet/quiet.gd")}
+	var root_choices = complete("", visible)
+	check(root_choices.has("probe") and not root_choices.has("quiet"), "root completion omits non-discoverable visible scopes")
+	equal(run_text("quiet", Sh.Context.new_ctx("quiet", visible)).stdout.strip_edges(), "quiet ran", "non-discoverable visible scope still runs")
+	check(not run_text("help", Sh.Context.new_ctx("help", visible)).stdout.contains("quiet"), "help omits non-discoverable visible scopes")
+
+	var probe = Sh.Load.load_command(COMMANDS + "probe.gd")
+	ctx.scopes_hidden["probe_alias"] = {"script": probe}
+	ctx.scopes_hidden["probe_object"] = {"script": probe.new()}
+	choices = complete("hidden ", ctx)
+	check(choices.has("probe_alias") and choices.has("probe_object"), "hidden lists runtime scopes by registered name")
+	equal(run_text("hidden probe_object", Sh.Context.new_ctx("object", ctx)).exit_code, 0, "hidden routes object scopes")
+
+	ctx = Sh.Context.new()
 	var independent = Sh.Context.new()
-	ctx.scopes_hidden.erase("builtins")
-	check(independent.has_scope("builtins"), "independent builtin parent registration")
+	ctx.scopes_hidden.erase("hidden")
+	check(independent.has_scope("hidden"), "independent hidden parent registration")
 	var child = Sh.Context.new_ctx("child", independent)
-	child.scopes_hidden.erase("builtins")
-	check(independent.has_scope("builtins"), "child parent registration is independent")
+	child.scopes_hidden.erase("hidden")
+	check(independent.has_scope("hidden"), "child parent registration is independent")
 	var empty = Sh.Context.new("", false)
 	check(empty.scopes.is_empty() and empty.scopes_hidden.is_empty(), "context without builtins has no registrations")
 
@@ -264,6 +301,30 @@ func _test_files():
 		DirAccess.remove_absolute(temp.path_join(name))
 	DirAccess.remove_absolute(temp.path_join("child"))
 	DirAccess.remove_absolute(temp)
+
+func _test_clear():
+	var ctx = session()
+	var missing = run_text("clear", Sh.Context.new_ctx("clear", ctx))
+	check(missing.exit_code == 1 and missing.stderr.contains("no console"), "clear without a console fails")
+	var calls = []
+	ctx.host_data["clear_callback"] = func(_active, history):
+		calls.append(history)
+		return 3
+	equal(run_text("clear --history", Sh.Context.new_ctx("clear", ctx)).exit_code, 3, "clear returns the callback status")
+	equal(calls, [true], "clear passes the history flag to the host callback")
+	var hosted = Sh.Console.new(ctx)
+	hosted.set_context(ctx)
+	check(ctx.host_data["clear_callback"].get_method() != "_clear_from_command", "console keeps a host clear callback")
+	var plain = Sh.Console.new()
+	var transcript = plain.create_output()
+	plain.execute("echo visible")
+	plain.execute("clear")
+	equal(transcript.get_parsed_text(), "", "console default clear empties the transcript")
+	check(not plain.command_history.is_empty(), "clear keeps history without --history")
+	plain.execute("clear --history")
+	check(plain.command_history.is_empty(), "clear --history empties console history")
+	hosted.free()
+	plain.free()
 
 func _write_file(path:String, text:String) -> void:
 	var file = FileAccess.open(path, FileAccess.WRITE)
@@ -308,6 +369,16 @@ func _test_echo_formatting():
 	ctx.variables["$SUB"] = "$(counter)"
 	syntax.to_bbcode("echo $(counter) $SUB", true)
 	equal(counter.calls, 0, "echo previews never evaluate substitutions")
+	equal(Sh.Utils.color_text("[b]", Color.RED), "[color=ff0000][lb]b][/color]", "color_text escapes BBCode")
+	var hooked = Sh.Context.new()
+	check(Sh.Utils.file_paths(hooked).has("res://tests/gdsh/runtime_test.gd"), "file_paths walks res:// by default")
+	hooked.host_data["file_paths"] = func(directories): return PackedStringArray(["dirs" if directories else "files"])
+	equal(Array(Sh.Utils.file_paths(hooked, true)), ["dirs"], "file_paths uses the host hook")
+	var changed = [0]
+	hooked.host_data["filesystem_changed"] = func(): changed[0] += 1
+	Sh.Utils.filesystem_changed(hooked)
+	Sh.Utils.filesystem_changed(Sh.Context.new())
+	equal(changed[0], 1, "filesystem_changed calls only the host hook")
 
 func complete(text:String, ctx:Sh.Context=null, caret:int=-1):
 	if ctx == null:
@@ -583,7 +654,7 @@ func _test_hidden_scopes():
 	ctx.stdout = ""
 	var initial_help = run_text("help", ctx).stdout.strip_edges()
 	check(initial_help.begins_with("Commands:\n  (none)\n\nHidden commands:"), "help separates empty visible and hidden scopes")
-	check(initial_help.contains("\n  help"), "help lists itself as hidden")
+	check(initial_help.contains("\n  builtins") and initial_help.contains("\n  hidden") and not initial_help.contains("\n  help"), "help lists hidden namespaces and omits non-discoverable builtins")
 	check(not initial_help.contains("__function__") and not initial_help.contains("__run_script__"), "help excludes reserved internal scopes")
 	var hidden_lines = initial_help.get_slice("Hidden commands:\n", 1).split("\n", false)
 	var sorted_hidden = Array(hidden_lines)
@@ -661,8 +732,8 @@ func _test_highlighting():
 	edit.syntax_highlighter = syntax
 	root.add_child(edit)
 	check(not syntax.highlight_globals, "global highlighting defaults off")
-	_check_highlight(edit, "builtins echo hello", "builtins", palette.scope, "hidden parent highlighted")
-	_check_highlight(edit, "builtins echo hello", "echo", palette.scope, "hidden command highlighted")
+	_check_highlight(edit, "hidden echo hello", "hidden", palette.scope, "hidden parent highlighted")
+	_check_highlight(edit, "hidden echo hello", "echo", palette.scope, "hidden command highlighted")
 	_check_highlight(edit, "probe arg", "probe", palette.function_def, "function shadows command color")
 	_check_highlight(edit, "@p arg", "@p", palette.alias, "context alias highlighted")
 	_check_highlight(edit, "echo $KNOWN", "$KNOWN", palette.variable, "known variable")

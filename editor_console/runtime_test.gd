@@ -32,14 +32,19 @@ func _run():
 	check(Adapter.expand("echo $unknown", ctx).text == "echo ''", "unknown GDSh variable is empty")
 	check(Adapter.expand("echo $(echo gdsh)", ctx).text == "echo 'gdsh'", "GDSh substitution")
 	check(Adapter.expand("echo $value", ctx).text == "echo 'hello ; echo wrong'", "expanded values are shell quoted")
-	for command in ["misc editor_console count", "count", "builtins echo hello", "echo hello"]:
+	check(ctx.scopes_hidden.has("cat") and ctx.scopes_hidden.has("utils") and ctx.scopes_hidden.has("os") and not ctx.scopes_hidden.has("manifest"), "hidden scopes include gdsh_lib utils and editor commands")
+	for command in ["utils count", "count", "builtins echo hello", "hidden builtins echo hello", "echo hello"]:
 		var result = Sh.Context.new_ctx("test", ctx)
 		result.stdin = "one\ntwo\n"
 		Sh.Execute.execute_command_multiline(command, result)
 		check(result.exit_code == 0, "command: " + command + " " + result.stderr)
 	check(not Sh.Completion.new("", ctx).get_completions().has("count"), "editor utility hidden at root")
-	check(Sh.Completion.new("misc editor_console ", ctx).get_completions().has("count"), "editor utility namespace completion")
-	check(Sh.Completion.new("builtins ", ctx).get_completions().has("echo"), "GDSh builtin namespace completion")
+	var hidden_choices = Sh.Completion.new("hidden ", ctx).get_completions()
+	check(hidden_choices.has("builtins") and hidden_choices.has("utils"), "hidden completes namespaces")
+	for name in ["count", "echo", "os", "class", "clear"]:
+		check(not hidden_choices.has(name), "hidden omits non-discoverable " + name)
+	check(Sh.Completion.new("misc editor_console ", ctx).get_completions().has("os"), "editor utility namespace completion")
+	check(Sh.Completion.new("utils ", ctx).get_completions().has("count"), "utils namespace completion")
 	if OS.get_name() != "Windows":
 		for command in ["os printf 'one\\ntwo\\n' | count", "os printf '%s' $$HOME", "os printf '%s' $$(printf shell)"]:
 			var result = Sh.Context.new_ctx("OS", ctx)
@@ -77,7 +82,7 @@ func _test_editor_behavior(ctx:Sh.Context):
 		return 0)
 	ctx.scopes["plugin_callback"] = {"script": callback}
 	check(_result("plugin_callback one two", ctx).stdout.strip_edges() == "plugin:one two", "callable scope adapter")
-	check(_result("misc editor_console math 2 + 3", ctx).stdout.strip_edges() == "5", "editor math delegates to GDSh expr")
+	check(_result("math 2 + 3", ctx).stdout.strip_edges() == "5", "editor math delegates to GDSh expr")
 	var fixture = load("res://tests/editor_console/fixtures/global_fixture.gd")
 	fixture.calls = 0
 	_result("false && os echo $(EditorConsoleMigrationFixture call greeting -- skip)", ctx)
@@ -119,8 +124,9 @@ func _test_editor_behavior(ctx:Sh.Context):
 	var scopes = ctx.scopes_hidden.duplicate()
 	scopes.merge(ctx.scopes, true)
 	var listing = bridge._command_list(scopes)
-	for name in ["builtins echo:", "misc editor_console count:", "count:", "plugin_callback:"]:
-		check(name in listing, "MCP command listing includes " + name)
+	for name in ["\nbuiltins echo:", "\nutils count:", "\nmisc editor_console os:", "\necho:", "\nplugin_callback:"]:
+		check(name in "\n" + listing, "MCP command listing includes " + name.strip_edges())
+	check(not "\nhidden" in "\n" + listing, "MCP command listing does not repeat hidden commands")
 	var first = Sh.Context.new_ctx("request", ctx, true)
 	first.append_output("bootstrap output")
 	var response = bridge._capture("request_value = one; echo first", first)
@@ -138,6 +144,7 @@ func _test_prompt(ctx:Sh.Context):
 	host.console_ctx = ctx
 	host.line_edit = prompt.input
 	ctx.host_data["console"] = weakref(host)
+	ctx.host_data["clear_callback"] = host._clear_callback # As console_container.new_ctx installs it.
 	prompt.execution_handler = host._execute_submission
 	prompt.input.completion_factory = host._make_completion
 	prompt.echo_values = true
@@ -167,7 +174,7 @@ func _test_prompt(ctx:Sh.Context):
 	check(not host.os_mode, "OS toggle returns to GDSh")
 	await _test_path_completion(host, prompt)
 	check(submitted == finished, "one submitted and finished signal per command")
-	prompt.execute("misc clear --history")
+	prompt.execute("clear --history")
 	check(prompt.command_history.is_empty() and transcript.text.is_empty(), "clear targets correct transcript/history")
 	prompt.execute("echo [color=red]colored[/color]")
 	check("colored" in transcript.get_parsed_text(), "editor transcript renders colored output")
@@ -175,6 +182,7 @@ func _test_prompt(ctx:Sh.Context):
 	prompt.free()
 	host.free()
 	ctx.host_data.erase("console")
+	ctx.host_data.erase("clear_callback")
 
 
 func _test_path_completion(host, prompt):
