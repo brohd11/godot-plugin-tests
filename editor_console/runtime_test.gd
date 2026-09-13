@@ -77,6 +77,12 @@ func _test_editor_behavior(ctx:Sh.Context):
 		check(result.exit_code == 0 and ("hello world" in result.stdout or "42" in result.stdout), "global call: " + text + ": " + result.stderr)
 	check(Sh.Completion.new("EditorConsoleMigrationFixture call ", ctx).get_completions().has("greeting"), "bare global method completion")
 	check(Sh.Completion.new("EditorConsoleMigrationFixture.Inner call ", ctx).get_completions().has("answer"), "member access completion")
+	var converted_call = _result("EditorConsoleMigrationFixture call add -- 3", ctx)
+	check(converted_call.exit_code == 0 and "Arg 'a' conversion" in converted_call.stdout and converted_call.stdout.strip_edges().ends_with("5"), "call converts args and uses declared defaults: " + converted_call.stdout + converted_call.stderr)
+	var default_call = _result("EditorConsoleMigrationFixture call --default add", ctx)
+	check(default_call.exit_code == 0 and default_call.stdout.strip_edges().ends_with("2"), "call --default creates missing args: " + default_call.stdout + default_call.stderr)
+	var bad_call = _result("EditorConsoleMigrationFixture call add -- nope", ctx)
+	check(bad_call.exit_code != 0 and "type mismatch" in bad_call.stderr, "call reports unconvertible args with a failing status")
 	var callback = load("res://addons/editor_console/src/class/base/callable_command.gd").new(func(active):
 		active.append_output("plugin:" + " ".join(active.unconsumed_tokens))
 		return 0)
