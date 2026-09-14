@@ -6,7 +6,7 @@ extends EditorScript
 ## five ways - baseline, reduced, relative, renamed, backported - so the same fixtures have to come
 ## out correct under settings that are mutually exclusive with each other.
 ##
-## EDITOR ONLY. Running an export reaches for EditorInterface and EditorConsoleSingleton, so this
+## EDITOR ONLY. Running an export reaches for EditorInterface, so this
 ## suite cannot join tests/plugin_exporter/run_headless.gd - that runner's SUITES list is explicit,
 ## and leaving this file out of it is what keeps headless green.
 ##
