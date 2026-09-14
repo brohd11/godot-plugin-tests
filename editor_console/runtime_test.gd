@@ -33,6 +33,12 @@ func _run():
 	check(Adapter.expand("echo $(echo gdsh)", ctx).text == "echo 'gdsh'", "GDSh substitution")
 	check(Adapter.expand("echo $value", ctx).text == "echo 'hello ; echo wrong'", "expanded values are shell quoted")
 	check(ctx.scopes_hidden.has("cat") and ctx.scopes_hidden.has("utils") and ctx.scopes_hidden.has("os") and not ctx.scopes_hidden.has("manifest"), "hidden scopes include gdsh_lib utils and editor commands")
+	var scene_choices = Sh.Completion.new("editor scene ", ctx).get_completions()
+	check(ctx.scopes.has("tree") and scene_choices.has("root") and scene_choices.has("select") and not scene_choices.has("nodes"), "tree is top-level; editor scene keeps its own commands: " + str(scene_choices.keys()))
+	var editor_choices = Sh.Completion.new("editor ", ctx).get_completions()
+	check(editor_choices.has("undo") and editor_choices.has("redo"), "editor completes undo and redo")
+	var bridged = EditorConsoleSingleton.ConsoleBridge._capture('echo "[color=red]a[/color]"', ctx)
+	check(bridged.stdout.strip_edges() == "a", "bridge returns plain text: " + bridged.stdout)
 	for command in ["utils count", "count", "builtins echo hello", "hidden builtins echo hello", "echo hello"]:
 		var result = Sh.Context.new_ctx("test", ctx)
 		result.stdin = "one\ntwo\n"

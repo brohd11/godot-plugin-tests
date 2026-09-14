@@ -68,6 +68,11 @@ func session():
 	ctx.scopes.merge(Sh.Load.load_directory(COMMANDS), true)
 	return ctx
 
+func flag_session():
+	var ctx = session()
+	ctx.scopes.merge(Sh.Load.load_directory(FIXTURES + "flags/"), true)
+	return ctx
+
 func run_text(text:String, ctx:Sh.Context=null):
 	if ctx == null:
 		ctx = session()
@@ -112,6 +117,15 @@ func _test_execution():
 	equal(output("echo 'one two' \"three four\""), "one two three four", "quoting")
 	equal(output("X = world; echo $X"), "world", "assignment")
 	equal(output("X = world; echo '$X'"), "$X", "single quotes are literal")
+	equal(output("X = ab; echo \"${X}1\""), "ab1", "braced variable joins following text")
+	equal(output("X = ab; echo ${X}_y"), "ab_y", "unquoted braced variable")
+	equal(output("X = ab; echo '${X}'"), "${X}", "single-quoted braced variable is literal")
+	equal(output("f() { echo ${1}x }; f a"), "ax", "braced positional variable")
+	var bad_brace = run_text("echo ${X")
+	check(bad_brace.exit_code == Sh.Context.ExitCode.ERR and bad_brace.stderr.contains("Bad substitution"), "unclosed braced variable is a syntax error: " + bad_brace.stderr)
+	equal(run_text('echo "[color=ff0000]a[/color]"').stdout.strip_edges(), "[color=ff0000]a[/color]", "displayed output keeps color markup")
+	equal(run_text('echo "[color=#ff0000]a[/color] [lb]b" | sink').stdout.strip_edges(), "stdin:a [b", "piped output drops color markup")
+	equal(run_text('X = $(echo "[color=red]a[/color]"); echo $X').stdout.strip_edges(), "a", "substitution captures plain text")
 	equal(output("alias @hello = echo hello; @hello"), "hello", "alias")
 	equal(output("echo $(echo nested)"), "nested", "substitution")
 	equal(output("echo $(echo $(echo deep))"), "deep", "nested substitution")
@@ -135,6 +149,16 @@ func _test_execution():
 	equal(piped.stdout.strip_edges(), "stdin:first", "stdin pipe")
 	equal(piped.stderr.strip_edges(), "sink diagnostic", "stderr separate from stdout")
 	equal(output("probe --mode=fast --loud one -- two three"), "fast:true:one:two,three", "flags and payload")
+	equal(output("probe -l one"), "default:true:one:", "short flag")
+	var probe_bad = run_text("probe -lz")
+	check(probe_bad.exit_code == Sh.Context.ExitCode.ERR and probe_bad.stderr.contains("Unrecognized flag: -z"), "unknown short flag letter: " + probe_bad.stderr)
+	equal(output("probe '-l' -5"), "default:false:-l,-5:", "quoted dash words and numbers stay positional")
+	check(run_text("probe --help").stdout.contains("-l, --loud"), "help lists short forms")
+	equal(run_text("flagvars", flag_session()).stdout.strip_edges(), "default:0:0.5:false:false:0,0", "flag vars keep defaults")
+	equal(run_text('flagvars --text="two words" --count=3 --ratio=1.5 --dry-run --size="(1, 2)"', flag_session()).stdout.strip_edges(), "two words:3:1.5:false:true:1,2", "value flags convert to the var type")
+	equal(run_text("flagvars -l", flag_session()).stdout.strip_edges(), "default:0:0.5:true:false:0,0", "short flag sets bool var")
+	var bad_value = run_text("flagvars --count=abc", flag_session())
+	check(bad_value.exit_code == Sh.Context.ExitCode.ERR and bad_value.stderr.contains("Invalid value for --count=abc") and bad_value.stdout.strip_edges() == "", "unconvertible flag value fails: " + bad_value.stderr)
 	var error = run_text("does_not_exist")
 	equal(error.exit_code, Sh.Context.ExitCode.ERR, "unknown command status")
 	check(error.stderr.contains("Unrecognized command"), "unknown command diagnostic")
@@ -153,6 +177,11 @@ func _test_execution():
 	equal(run_text("break").exit_code, 2, "break outside loop")
 	equal(run_text("return").exit_code, 2, "return outside function")
 	check(run_text("echo --help").stdout.contains("Echos"), "per-command help")
+	equal(run_text("echo --help").exit_code, 0, "--help exits 0")
+	var short_help = run_text("echo -h")
+	check(short_help.exit_code == 0 and short_help.stdout.contains("Echos"), "-h prints help")
+	equal(output("echo '-h'"), "-h", "quoted -h is an argument")
+	equal(output("[ -n abc ] && echo yes"), "yes", "dash words stay arguments for commands without short flags")
 
 func _test_loading():
 	var scopes = Sh.Load.load_directory(COMMANDS)
@@ -165,7 +194,7 @@ func _test_loading():
 	custom.scopes[script.get_command_name()] = {"script": script}
 	equal(run_text("probe", custom).stdout.strip_edges(), "default:false::", "manual registration")
 	var builtins = Sh.Load.load_builtins()
-	equal(builtins.size(), 18, "builtin manifest includes namespaces")
+	equal(builtins.size(), 19, "builtin manifest includes namespaces")
 	check(builtins.has("help") and builtins.has("clear"), "help and clear are builtins")
 	check(builtins.has("builtins") and builtins.has("hidden"), "builtins and hidden namespaces are registered")
 	for name in ["os", "global", "cat", "pwd"]:
@@ -183,7 +212,7 @@ func _test_builtins():
 	for text in ["", "bui"]:
 		var choices = complete(text, ctx)
 		check(not choices.has("builtins") and not choices.has("echo"), "builtins omitted from root completion: " + text)
-	var public_names = ["break", "continue", "return", "exit", "shift", "true", "false", "[", "expr", "echo", "source", "cd", "help", "hidden", "clear"]
+	var public_names = ["break", "continue", "return", "exit", "shift", "true", "false", "[", "expr", "echo", "source", "cd", "help", "hidden", "clear", "undoredo"]
 	var choices = complete("builtins ", ctx)
 	var children = ctx.get_scope("builtins").script.new().get_commands()
 	equal(children.size(), public_names.size(), "parent discovers only public builtins")
@@ -644,6 +673,8 @@ func _test_redirection():
 	ctx.variables["$OUT"] = "space name.txt"
 	run_text('echo spaced >"$OUT"', ctx)
 	equal(_read(temp.path_join("space name.txt")), "spaced\n", "quoted variable target")
+	run_text('echo "[color=red]a[/color]" >"$OUT"', ctx)
+	equal(_read(temp.path_join("space name.txt")), "a\n", "redirected output drops color markup")
 	run_text("echo dynamic >$(echo generated.txt)", ctx)
 	equal(_read(temp.path_join("generated.txt")), "dynamic\n", "substitution target")
 	var expanded_error = run_text("echo hidden >$(echo one two)", ctx)
@@ -787,6 +818,9 @@ func _test_highlighting():
 	_check_highlight(edit, "@p arg", "@p", palette.alias, "context alias highlighted")
 	_check_highlight(edit, "echo $KNOWN", "$KNOWN", palette.variable, "known variable")
 	_check_highlight(edit, "echo $MISSING", "$MISSING", palette.unknown_variable, "unknown variable")
+	_check_highlight(edit, "echo ${KNOWN}1", "${KNOWN}", palette.variable, "braced variable")
+	_check_highlight(edit, "echo ${}", "${}", palette.unknown_variable, "empty braces color as one variable span")
+	_check_highlight(edit, "echo ${", "${", palette.unknown_variable, "an opening brace colors as a variable")
 	for name in ["$0", "$1", "$?", "$#", "$@"]:
 		_check_highlight(edit, "echo " + name, name, palette.variable, "special/positional variable " + name)
 	_check_highlight(edit, "echo $2", "$2", palette.unknown_variable, "missing positional variable")

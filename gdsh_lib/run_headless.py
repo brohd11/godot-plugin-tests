@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build an isolated project with GDSh and gdsh_lib utils and run their runtime tests (Python 3, Godot 4.6+)."""
+"""Build an isolated project with GDSh and the gdsh_lib utils and tree libs and run their runtime tests (Python 3, Godot 4.6+)."""
 import argparse
 import re
 import shutil
@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-MODULES = [Path('addons/addon_lib/gdsh'), Path('addons/addon_lib/gdsh_lib/utils'), Path('tests/gdsh_lib')]
+MODULES = [Path('addons/addon_lib/gdsh'), Path('addons/addon_lib/gdsh_lib/utils'), Path('addons/addon_lib/gdsh_lib/tree'), Path('tests/gdsh_lib')]
 
 
 def main():
