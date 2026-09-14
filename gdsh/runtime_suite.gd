@@ -1018,7 +1018,9 @@ func _test_script_highlighter_logic():
 
 func _test_console():
 	# Give the popup enough vertical room to test both natural resizing and its cap.
-	_tree().root.size = Vector2i(640, 480)
+	# In the editor, root is the editor window: leave it alone (the cap check is relative).
+	if not Engine.is_editor_hint():
+		_tree().root.size = Vector2i(640, 480)
 	var console = Sh.Console.new()
 	var selected_syntax = Sh.Console.Highlighter.new()
 	console.set_highlighter(selected_syntax)
@@ -1221,7 +1223,10 @@ func _test_console():
 	console.input._on_text_changed() # Programmatic assignment does not emit TextEdit.text_changed.
 	equal(console.input.get_line_count(), 1, "console input remains one line after pasted newlines")
 	check(console.input.syntax_highlighter != null, "console input installs runtime syntax highlighting")
-	await _test_console_input_consumption(console, transcript)
+	if Engine.is_editor_hint():
+		report.append("(skipped console input consumption in the editor: it injects real key and wheel events)")
+	else:
+		await _test_console_input_consumption(console, transcript)
 	console.queue_free()
 
 

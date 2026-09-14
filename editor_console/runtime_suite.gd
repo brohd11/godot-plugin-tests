@@ -173,7 +173,8 @@ func _make_prompt(ctx:Sh.Context) -> Array:
 	host.line_edit = prompt.input
 	ctx.host_data["console"] = weakref(host)
 	ctx.host_data["clear_callback"] = host._clear_callback # As console_container.new_ctx installs it.
-	prompt.execution_handler = host._execute_submission
+	# The body, not the serialized handler: `test` already runs inside the editor's serial runner.
+	prompt.execution_handler = host._run_submission
 	prompt.input.completion_factory = host._make_completion
 	prompt.echo_values = true
 	prompt.host = weakref(host)

@@ -1,6 +1,6 @@
 extends SceneTree
-## Headless (full, including frame-dependent prompt completion): python3 tests/editor_console/run_headless.py
-## Editor console: `test editor_console` runs the frame-free checks.
+## Headless: python3 tests/editor_console/run_headless.py
+## Editor console: `test editor_console` runs the same checks, including prompt completion.
 const Suite = preload("res://tests/editor_console/runtime_suite.gd")
 
 
@@ -9,16 +9,14 @@ func _initialize():
 
 
 func _run():
-	var suite = Suite.new()
-	suite.run_sync()
-	await suite.run_frames()
-	print("\n".join(suite.finish()))
-	quit(1 if suite.failures else 0)
+	var res = await run_tests()
+	print("\n".join(res.output))
+	quit(1 if res.result else 0)
 
 
-## Editor console entry. GDSh commands cannot await, so frame-dependent checks only run headless.
+## Entry for the editor console `test` command, which awaits the frame-dependent checks.
 static func run_tests() -> Dictionary:
 	var suite = Suite.new()
 	suite.run_sync()
-	suite.report.append("(skipped frame-dependent prompt completion; run tests/editor_console/run_headless.py)")
+	await suite.run_frames()
 	return {"result": suite.failures, "output": suite.finish()}
