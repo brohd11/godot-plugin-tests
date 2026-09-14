@@ -54,6 +54,50 @@ func run_sync():
 func run_frames():
 	await _test_console()
 	await _test_console_path_completion()
+	await _test_async()
+
+
+func _run_async(text:String, ctx:Sh.Context) -> Sh.Context:
+	return await Sh.Execute.execute_command_multiline(text, Sh.Context.new_ctx("async", ctx))
+
+func _async_output(text:String, ctx:Sh.Context) -> String:
+	var result = await _run_async(text, ctx)
+	return result.stdout.strip_edges()
+
+## Commands that await frames: every construct waits for them before moving on.
+func _test_async():
+	var ctx = session()
+	ctx.scopes.merge(Sh.Load.load_directory(FIXTURES + "async/"), true)
+	var start = Engine.get_process_frames()
+	equal(await _async_output("wait_frames 2 first && echo after", ctx), "waited:first\nafter", "&& waits for an async command")
+	check(Engine.get_process_frames() - start >= 2, "async command spans frames")
+	equal(await _async_output("wait_frames 1 --fail x || echo handled", ctx), "waited:x\nhandled", "|| sees the async failure")
+	equal(await _async_output("wait_frames 1 --fail x; echo $?", ctx), "waited:x\n1", "$? is the async status")
+	equal(await _async_output("wait_frames 1 piped | sink", ctx), "stdin:waited:piped", "pipe waits for the async stage")
+	var path = "user://gdsh_async_redirect.txt"
+	await _run_async("wait_frames 1 filed > " + path, ctx)
+	equal(FileAccess.get_file_as_string(path), "waited:filed\n", "redirect captures async output")
+	DirAccess.remove_absolute(path)
+	equal(await _async_output("for n in a b { wait_frames 1 $n }", ctx), "waited:a\nwaited:b", "for body waits")
+	equal(await _async_output("while true { wait_frames 1 loop; break }", ctx), "waited:loop", "while body waits")
+	equal(await _async_output("if wait_frames 1 cond { echo yes }", ctx), "waited:cond\nyes", "if condition waits")
+	equal(await _async_output("f() { wait_frames 1 fn; return 3 }; f; echo $?", ctx), "waited:fn\n3", "function waits and returns")
+	equal(await _async_output("(wait_frames 1 sub); echo next", ctx), "waited:sub\nnext", "subshell waits")
+	var substituted = await _run_async("echo $(wait_frames 1 sub) && echo no", ctx)
+	check(substituted.stdout.is_empty() and substituted.exit_code == 2 and substituted.stderr.contains("cannot run inside $(...)"), "async substitution fails the command: " + substituted.stderr)
+	for i in 3: await _tree().process_frame # The stopped substitution body resumes harmlessly.
+	var sync_result = _sync("execute_command_multiline", ["echo now", Sh.Context.new_ctx("sync", ctx)])
+	check(sync_result is Sh.Context and sync_result.stdout.strip_edges() == "now", "input that never pauses finishes in the calling frame")
+	var console = Sh.Console.new(Sh.Context.new_ctx("async console", ctx))
+	console.execute("wait_frames 2 slow") # Not awaited: returns at the first pause.
+	check(console.is_busy and not console.input.editable, "console is busy while a command waits")
+	var refused = _submit(console, "echo second")
+	check(refused.exit_code == 2 and refused.stderr.contains("busy") and not console.command_history.has("echo second"), "busy console refuses submissions")
+	var finished = await console.command_finished
+	equal(finished[1].stdout.strip_edges(), "waited:slow", "console result waits for the command")
+	check(not console.is_busy and console.input.editable, "console unlocks after the command")
+	await _tree().process_frame # Resumed inside command_finished's emission, which locks the console.
+	console.free()
 
 
 func finish() -> Array[String]:
@@ -87,7 +131,18 @@ func flag_session():
 func run_text(text:String, ctx:Sh.Context=null):
 	if ctx == null:
 		ctx = session()
-	return Sh.Execute.execute_command_multiline(text, ctx)
+	return _sync("execute_command_multiline", [text, ctx])
+
+## Synchronous engine call for input that never pauses. The Callable hides the coroutine from
+## the analyzer, and a coroutine that never pauses returns its Context directly.
+## Async checks use `await Sh.Execute...` instead.
+func _sync(method:String, args:Array):
+	return Callable(Sh.Execute, method).callv(args)
+
+## Synchronous console submission, as `_sync`. A submission that pauses must not use this:
+## taking the value of a paused call is a runtime error.
+func _submit(console, text:String):
+	return Callable(console, "execute").call(text)
 
 func output(text:String):
 	return run_text(text).stdout.strip_edges()
@@ -183,7 +238,7 @@ func _test_execution():
 	check(not b.variables.has("$X"), "independent variables")
 	a.scopes_hidden.erase("echo")
 	check(b.scopes_hidden.has("echo"), "independent builtin scopes")
-	equal(Sh.Execute.execute_command(" ").exit_requested, false, "blank command is harmless")
+	equal(_sync("execute_command", [" "]).exit_requested, false, "blank command is harmless")
 	equal(run_text("false").exit_code, 1, "false status")
 	equal(run_text("break").exit_code, 2, "break outside loop")
 	equal(run_text("return").exit_code, 2, "return outside function")
@@ -337,8 +392,8 @@ func _test_files():
 	run_text("cd missing", ctx)
 	equal(ctx.cwd, before, "failed cd preserves cwd")
 	equal(ctx.exit_code, 2, "failed cd status")
-	check(not Sh.Execute.source_file(temp.path_join("missing.gdsh")).stderr.is_empty(), "missing source diagnostic")
-	equal(Sh.Execute.source_file(temp.path_join("not_gdsh.txt")).exit_code, 1, "non-gdsh rejected")
+	check(not _sync("source_file", [temp.path_join("missing.gdsh")]).stderr.is_empty(), "missing source diagnostic")
+	equal(_sync("source_file", [temp.path_join("not_gdsh.txt")]).exit_code, 1, "non-gdsh rejected")
 	for name in ["source.gdsh", "args.gdsh", "not_gdsh.txt"]:
 		DirAccess.remove_absolute(temp.path_join(name))
 	DirAccess.remove_absolute(temp.path_join("child"))
@@ -359,11 +414,11 @@ func _test_clear():
 	check(ctx.host_data["clear_callback"].get_method() != "_clear_from_command", "console keeps a host clear callback")
 	var plain = Sh.Console.new()
 	var transcript = plain.create_output()
-	plain.execute("echo visible")
-	plain.execute("clear")
+	_submit(plain, "echo visible")
+	_submit(plain, "clear")
 	equal(transcript.get_parsed_text(), "", "console default clear empties the transcript")
 	check(not plain.command_history.is_empty(), "clear keeps history without --history")
-	plain.execute("clear --history")
+	_submit(plain, "clear --history")
 	check(plain.command_history.is_empty(), "clear --history empties console history")
 	hosted.free()
 	plain.free()
@@ -377,21 +432,21 @@ func _test_new_ctx():
 		built.append(session())
 		return built.back()
 	var original = console.context
-	console.execute("x = 1")
+	_submit(console, "x = 1")
 	console.context.cwd = COMMANDS
-	var result = console.execute("x = 2 && new_ctx && echo after; echo skipped")
+	var result = _submit(console, "x = 2 && new_ctx && echo after; echo skipped")
 	equal(result.exit_code, 0, "new_ctx succeeds")
 	check(not result.stdout.contains("after") and not result.stdout.contains("skipped"), "new_ctx stops the rest of the submission")
 	check(built.size() == 1 and console.context == built[0] and console.context != original, "new_ctx swaps in the factory context")
 	check(not console.context.variables.has("$x") and console.context.cwd == "res://", "new_ctx drops session state")
-	equal(console.execute("echo alive").stdout.strip_edges(), "alive", "submissions run on the new session")
+	equal(_submit(console, "echo alive").stdout.strip_edges(), "alive", "submissions run on the new session")
 	console.context_factory = Callable()
-	equal(console.execute("false; new_ctx").exit_code, 0, "new_ctx status replaces the prior status")
+	equal(_submit(console, "false; new_ctx").exit_code, 0, "new_ctx status replaces the prior status")
 	check(console.context != built[0] and built.size() == 1, "reset without a factory uses a bare context")
 	var hosted_ctx = session()
 	hosted_ctx.host_data["new_ctx_callback"] = func(_ctx): return 4
 	var hosted = Sh.Console.new(hosted_ctx)
-	equal(hosted.execute("new_ctx").exit_code, 4, "new_ctx returns the host callback status")
+	equal(_submit(hosted, "new_ctx").exit_code, 4, "new_ctx returns the host callback status")
 	check(hosted.context == hosted_ctx, "console keeps a host new_ctx callback")
 	console.free()
 	hosted.free()
@@ -976,7 +1031,7 @@ func _test_console():
 	equal(_highlight_color(console.input, 0), selected_syntax.palette.scope, "loading commands refreshes highlighting")
 	console.input.text = "$HIGHLIGHT_TEST"
 	equal(_highlight_color(console.input, 0), selected_syntax.palette.unknown_variable, "undefined variable is unknown")
-	console.execute("HIGHLIGHT_TEST=value")
+	_submit(console, "HIGHLIGHT_TEST=value")
 	equal(_highlight_color(console.input, 0), selected_syntax.palette.variable, "execution refreshes variable highlighting")
 	console.set_context(Sh.Context.new())
 	equal(_highlight_color(console.input, 0), selected_syntax.palette.unknown_variable, "console context replacement refreshes highlighting")
@@ -1002,7 +1057,7 @@ func _test_console():
 	console.set_prompt("Debug >", Color.ORANGE)
 	var debug_prompt = "[color=%s]Debug >[/color]" % Color.ORANGE.to_html()
 	equal(console.prompt_label.text, debug_prompt, "colored fixed prompt uses BBCode")
-	console.execute("true")
+	_submit(console, "true")
 	equal(console.prompt_label.text, debug_prompt, "fixed prompt persists after execution")
 	console.set_context(console.context)
 	equal(console.prompt_label.text, debug_prompt, "fixed prompt persists after a context update")
@@ -1030,28 +1085,28 @@ func _test_console():
 	check(console.context.scopes.has("probe"), "loaded commands layer into console context")
 	check(Sh.Completion.new("pro", console.context).get_completions().has("probe"), "loaded commands complete through console context")
 
-	var result = console.execute("X=one; echo $X")
+	var result = _submit(console, "X=one; echo $X")
 	equal(result.stdout.strip_edges(), "one", "console execute returns its result context")
 	equal(console.context.variables.get("$X"), "one", "console preserves variables in its main context")
 	equal(submitted, ["X=one; echo $X"], "console emits submitted signal")
 	equal(finished.size(), 1, "console emits finished signal")
 	check(finished[0][1] == result, "finished signal carries the result context")
-	console.execute("f(){echo persisted};alias @persist=f")
-	equal(console.execute("@persist").stdout.strip_edges(), "persisted", "console preserves functions and aliases")
-	console.execute("cd tests/gdsh/fixtures")
+	_submit(console, "f(){echo persisted};alias @persist=f")
+	equal(_submit(console, "@persist").stdout.strip_edges(), "persisted", "console preserves functions and aliases")
+	_submit(console, "cd tests/gdsh/fixtures")
 	check(console.context.cwd.ends_with("/tests/gdsh/fixtures"), "console preserves cwd in its main context")
-	console.execute("cd res://")
+	_submit(console, "cd res://")
 
-	console.execute("false")
-	equal(console.execute("echo $?").stdout.strip_edges(), "1", "console preserves status between submissions")
-	var exit_result = console.execute("exit 7")
+	_submit(console, "false")
+	equal(_submit(console, "echo $?").stdout.strip_edges(), "1", "console preserves status between submissions")
+	var exit_result = _submit(console, "exit 7")
 	equal(exit_result.exit_code, 7, "console result preserves exit status")
 	check(not console.context.exit_requested, "exit does not stop the console session")
-	equal(console.execute("echo alive").stdout.strip_edges(), "alive", "console remains usable after exit")
+	equal(_submit(console, "echo alive").stdout.strip_edges(), "alive", "console remains usable after exit")
 
-	console.execute("echo duplicate")
-	console.execute("echo another")
-	console.execute("echo duplicate")
+	_submit(console, "echo duplicate")
+	_submit(console, "echo another")
+	_submit(console, "echo duplicate")
 	equal(console.command_history.count("echo duplicate"), 1, "console history removes duplicates")
 	equal(console.command_history.back(), "echo duplicate", "console history promotes repeated commands")
 	console.input.history_requested.emit(-1)
@@ -1072,11 +1127,11 @@ func _test_console():
 	check(not console.input.has_theme_font_override("font"), "theme changes do not restore a removed font override")
 	console.add_font_override(source_font)
 	check(transcript.get_theme_font("normal_font") == source_font, "font override applies to an existing transcript")
-	console.execute("echo visible")
+	_submit(console, "echo visible")
 	check(console.prompt_label.text == default_prompt, "logged default prompt retains its light-blue source markup")
 	check(transcript.get_parsed_text().contains("Console $ echo visible"), "transcript echoes the prompt and command")
 	check(transcript.get_parsed_text().contains("visible"), "transcript appends stdout")
-	console.execute("unknown_console_command")
+	_submit(console, "unknown_console_command")
 	check(transcript.get_parsed_text().contains("stderr:"), "transcript labels stderr")
 	check(transcript.get_parsed_text().contains("Unrecognized command"), "transcript appends stderr")
 	console.clear_output()
@@ -1097,7 +1152,7 @@ func _test_console():
 	check(console.input.context == replacement, "console input follows replacement context")
 
 	console.load(OVERRIDES)
-	equal(console.execute("echo newest wins").stdout.strip_edges(), "layered:newest wins", "newest console command layer wins")
+	equal(_submit(console, "echo newest wins").stdout.strip_edges(), "layered:newest wins", "newest console command layer wins")
 	console.input.text = "echo submitted"
 	console.input.submit_requested.emit(console.input.text)
 	equal(console.last_result.stdout.strip_edges(), "layered:submitted", "input submission uses console execution")
