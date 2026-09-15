@@ -50,6 +50,7 @@ static func run_tests() -> Dictionary:
 		_test_relative()
 		_test_renamed()
 		_test_backport()
+		_test_struct()
 		_test_no_cross_contamination()
 		_test_every_reference_resolves()
 
@@ -279,6 +280,56 @@ static func _test_backport() -> void:
 	_check("backport: @abstract stripped", _has(dir, "src/core/backport_bits.gd", "@abstract"), false)
 	_check("backport: EditorInterface replaced", _has(dir, "src/core/backport_bits.gd",
 		'Engine.get_singleton(&"EditorInterface")'), true)
+
+
+## `#! struct`: a tagged data-only class becomes an enum plus create(), and the sites naming it become
+## array literals and Array hints. Not a setting, so every variant has to do it.
+static func _test_struct() -> void:
+	for variant:String in _dirs:
+		var vdir:String = _dirs[variant]
+		_check("%s: struct: file struct enum" % variant, _has(vdir, "src/core/struct_vec.gd", "enum { X, Y }"), true)
+		_check("%s: struct: file struct create" % variant, _has(vdir, "src/core/struct_vec.gd",
+			"static func create(px: float, py: float) -> Array:\n\treturn [px, py]"), true)
+		_check("%s: struct: _init gone" % variant, _has(vdir, "src/core/struct_vec.gd", "func _init"), false)
+
+	var dir = _dirs.get(BASELINE, "")
+	if dir == "":
+		return
+	_check("struct: inner class kept as the enum's scope", _has(dir, "src/core/struct_fixture.gd", "class Pair:"), true)
+	_check("struct: inner body", _has(dir, "src/core/struct_fixture.gd",
+		"\tenum { LEFT, RIGHT }\n\tstatic func create(l: int) -> Array:\n\t\treturn [l, \"r\"]"), true)
+	_check("struct: same-file constructor inlined", _has(dir, "src/core/struct_fixture.gd", 'return [v, "r"]'), true)
+	_check("struct: same-file return hint", _has(dir, "src/core/struct_fixture.gd", "static func make(v: int) -> Array:"), true)
+	_check("struct: preloaded file struct constructor", _has(dir, "src/core/struct_user.gd", "return [0.0, 0.0]"), true)
+	_check("struct: preloaded return hint", _has(dir, "src/core/struct_user.gd", "static func origin() -> Array:"), true)
+	_check("struct: inner class path hints", _has(dir, "src/core/struct_user.gd",
+		"static func passthrough(pair: Array) -> Array:"), true)
+	_check("struct: inner class path constructor", _has(dir, "src/core/struct_user.gd", 'var next: Array = [1, "r"]'), true)
+
+	# Phase 2: field reads index with the enum through each typed route.
+	var access = "src/core/struct_access.gd"
+	_check("struct access: typed param", _has(dir, access,
+		"return v[StructVec.X] * v[StructVec.X] + v[StructVec.Y] * v[StructVec.Y]"), true)
+	_check("struct access: call return", _has(dir, access, "return StructFixture.make(3)[StructFixture.Pair.LEFT]"), true)
+	_check("struct access: write", _has(dir, access, 'p[StructFixture.Pair.RIGHT] = "changed"'), true)
+	_check("struct access: inferred local", _has(dir, access, "v[StructVec.X] += 1.0"), true)
+	_check("struct access: for var", _has(dir, access, "total += v[StructVec.X]"), true)
+	_check("struct access: member and self", _has(dir, access, "return self.held[StructVec.Y] + held[StructVec.X]"), true)
+	_check("struct access: index", _has(dir, access, "return vs[0][StructVec.Y]"), true)
+	_check("struct access: typed array hint", _has(dir, access, "vs: Array[Array]"), true)
+	_check("struct access: typed literal kept", _has(dir, access, "var list: Array[Array] = [a, b]"), true)
+	_check("struct access: read out of the typed literal", _has(dir, access, "return list[1][StructVec.Y]"), true)
+	_check("struct access: sibling lambdas on one line", _has(dir, access,
+		'var readers = ["é", func(v: Array) -> float: return v[StructVec.X], func(w: Array) -> float: return w[StructVec.Y]]'), true)
+	_check("struct access: multi-line inline lambda", _has(dir, access,
+		"var ys := vs.map(func(e: Array) -> float:\n\t\tvar y: float = e[StructVec.Y]"), true)
+	_check("struct access: var-bound lambda", _has(dir, access, "var get_x = func(v: Array) -> float: return v[StructVec.X]"), true)
+	_check("struct access: nothing injected where the name exists", _has(dir, access, "### Plugin Exporter Structs"), false)
+
+	var blind = "src/core/struct_blind.gd"
+	_check("struct blind: read through the injected name", _has(dir, blind, "return StructUser.origin()[StructVec.X]"), true)
+	_check("struct blind: preload injected", _has(dir, blind,
+		'### Plugin Exporter Structs\nconst StructVec = preload("res://addons/plugin_exporter_test/src/core/struct_vec.gd")'), true)
 
 
 ## Each variant's setting must reach that variant and no other. The config declares them as untyped

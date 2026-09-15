@@ -23,6 +23,9 @@ const SUITES := [
 	{"name": "Builtin Return",           "script": "res://tests/brohd/gdscript_parser/builtin_return_test.gd"},
 	{"name": "Class At Line",            "script": "res://tests/brohd/gdscript_parser/class_at_line_test.gd"},
 	{"name": "Live Edit Lines",          "script": "res://tests/brohd/gdscript_parser/live_edit_lines_test.gd"},
+	{"name": "Nameless Enum + Lambda",   "script": "res://tests/brohd/gdscript_parser/nameless_enum_lambda_test.gd"},
+	{"name": "Lambda Scope",             "script": "res://tests/brohd/gdscript_parser/lambda_scope_test.gd"},
+	{"name": "Inline Lambdas",           "script": "res://tests/brohd/gdscript_parser/inline_lambda_test.gd"},
 ]
 
 
