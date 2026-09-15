@@ -78,8 +78,9 @@ static func _test_titles() -> void:
 	_check("single: titled", single[0][DocIndex.KEY_TITLE], "The big one")
 
 
-## A released plugin carries .doc; the dev tree it came from carries export_ignore/doc; and a
-## caller can point straight at either. A plugin root is never itself a doc folder.
+## A released plugin carries .doc; the dev tree it came from carries _export_ignore/doc or
+## export_ignore/doc (the former wins); and a caller can point straight at any of them. A plugin
+## root is never itself a doc folder.
 static func _test_find_doc_dir() -> void:
 	var addon = DIR + "addon/"
 	_w(addon + "plugin.cfg", "[plugin]\n")
@@ -88,6 +89,10 @@ static func _test_find_doc_dir() -> void:
 
 	_check("find: export_ignore/doc in a dev tree",
 		DocIndex.find_doc_dir(addon), (addon + "export_ignore/doc").trim_suffix("/"))
+
+	_w(addon + "_export_ignore/doc/index.md", "# Index\n")
+	_check("find: _export_ignore/doc preferred over export_ignore/doc",
+		DocIndex.find_doc_dir(addon), (addon + "_export_ignore/doc").trim_suffix("/"))
 
 	_w(addon + ".doc/index.md", "# Packaged\n")
 	_check("find: packaged .doc wins",

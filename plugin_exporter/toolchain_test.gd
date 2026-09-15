@@ -68,18 +68,18 @@ static func _test_newest_after() -> void:
 static func _test_cached_remote(root:String) -> void:
 	var cache_root = root.path_join("cache")
 	var dir = cache_root.path_join("toolchains/plugin_exporter-9.9.9")
-	_write(dir.path_join("plugin_exporter/plugin.cfg"), '[plugin]\nversion="9.9.9"\n')
+	_write(dir.path_join("addons/plugin_exporter/plugin.cfg"), '[plugin]\nversion="9.9.9"\n')
 	_write(dir.path_join("plugin-exporter-9.9.9.zip"), "not really a zip")
 
 	var tc = Toolchain.new()
 	var info = tc.resolve({"toolchain": "v9.9.9"}, cache_root, false, false)
 	_check("cached: resolved " + str(tc.errors), info.is_empty(), false)
 	if not info.is_empty():
-		_check("cached: dir", info.dir, dir.path_join("plugin_exporter"))
+		_check("cached: dir", info.dir, dir.path_join("addons/plugin_exporter"))
 		_check("cached: source", info.source, "remote")
 		_check("cached: id is zip hash", info.id, FileAccess.get_sha256(dir.path_join("plugin-exporter-9.9.9.zip")))
 
-	_write(dir.path_join("plugin_exporter/plugin.cfg"), '[plugin]\nversion="9.9.8"\n')
+	_write(dir.path_join("addons/plugin_exporter/plugin.cfg"), '[plugin]\nversion="9.9.8"\n')
 	var mismatch = Toolchain.new()
 	_check("cached: wrong version rejected", mismatch.resolve({"toolchain": "9.9.9"}, cache_root, false, false), {})
 	_check("cached: mismatch named", mismatch.errors.size() == 1 and "is 9.9.8, expected 9.9.9" in mismatch.errors[0], true)
@@ -96,14 +96,17 @@ static func _test_unzip(root:String) -> void:
 	DirAccess.make_dir_recursive_absolute(zip_path.get_base_dir())
 	var packer = ZIPPacker.new()
 	packer.open(zip_path)
-	packer.start_file("plugin_exporter/sub/a.txt")
-	packer.write_file("hello".to_utf8_buffer())
-	packer.close_file()
+	for entry in ["plugin_exporter/sub/a.txt", "__MACOSX/plugin_exporter/._a.txt", "plugin_exporter/.DS_Store"]:
+		packer.start_file(entry)
+		packer.write_file("hello".to_utf8_buffer())
+		packer.close_file()
 	packer.close()
 
 	var dest = root.path_join("unzip/out")
 	_check("unzip ok", ReleaseRunner.unzip(zip_path, dest), "")
 	_check("unzip content", FileAccess.get_file_as_string(dest.path_join("plugin_exporter/sub/a.txt")), "hello")
+	_check("unzip skips __MACOSX", DirAccess.dir_exists_absolute(dest.path_join("__MACOSX")), false)
+	_check("unzip skips .DS_Store", FileAccess.file_exists(dest.path_join("plugin_exporter/.DS_Store")), false)
 	_check("unzip bad archive", ReleaseRunner.unzip(root.path_join("unzip/missing.zip"), dest).begins_with("could not open"), true)
 
 

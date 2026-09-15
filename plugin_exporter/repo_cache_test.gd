@@ -34,6 +34,7 @@ static func run_tests() -> Dictionary:
 	var url = "file://" + remote
 
 	_test_fetch_and_read(root, url)
+	_test_list_and_stage(root, url)
 	_test_offline_cache_hit(root, url, remote)
 	_test_moved_tag(root, source)
 	_test_local_retag(root, source)
@@ -64,6 +65,16 @@ static func _test_fetch_and_read(root:String, url:String) -> void:
 	_check("extract ok " + cache.last_error, cache.extract(url, TAG, dest), true)
 	_check("extracted cfg", FileAccess.file_exists(dest.path_join("version.cfg")), true)
 	_check("mirror has no index", FileAccess.file_exists(cache.mirror_path(url).path_join("index")), false)
+
+
+static func _test_list_and_stage(root:String, url:String) -> void:
+	var cache = RepoCache.new(root.path_join("cache"))
+	_check("list_files has version.cfg", "version.cfg" in cache.list_files(url, TAG), true)
+	_check("list_files for a missing tag", cache.list_files(url, "v999.0.0"), [])
+	var staged = cache.stage(url, TAG)
+	_check("stage extracts " + cache.last_error, FileAccess.file_exists(staged.path_join("version.cfg")), true)
+	_check("stage is reused", cache.stage(url, TAG), staged)
+	_check("stage marker stays outside the tree", DirAccess.get_files_at(staged).has(".staged"), false)
 
 
 ## The whole point of the cache: once a tag is mirrored, the remote can vanish.

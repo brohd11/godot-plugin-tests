@@ -18,7 +18,7 @@ const KeysConfig = ExportFileUtils.KeysConfig
 
 const PLUGIN = "plugin_exporter_test"
 
-## Export folder basename per variant, in the order the config declares them.
+## export_name prefix per variant, in the order the config declares them.
 const BASELINE = "plugin-exporter-test"
 const REDUCED = "pet-reduced"
 const RELATIVE = "pet-relative"
@@ -29,12 +29,15 @@ static var _failures:Array[String] = []
 static var _passed:int = 0
 ## variant folder prefix -> absolute path of that variant's exported plugin directory
 static var _dirs:Dictionary = {}
+## exported plugin directory -> the res:// path it installs at
+static var _installs:Dictionary = {}
 
 
 static func run_tests() -> Dictionary:
 	_failures = []
 	_passed = 0
 	_dirs = {}
+	_installs = {}
 
 	if not Engine.is_editor_hint():
 		# Running the export needs EditorInterface, so there is nothing this suite can check.
@@ -77,17 +80,18 @@ static func _export() -> bool:
 
 	UtilsLocal.PluginExporterStatic.export_by_name(PLUGIN)
 
-	var root = ExportFileUtils.get_full_export_path(
-		config.get(KeysConfig.EXPORT_ROOT), config.get(KeysConfig.PLUGIN_FOLDER), config_path)
+	var plugin_folder = config.get(KeysConfig.PLUGIN_FOLDER)
+	var root = ExportFileUtils.get_full_export_path(config.get(KeysConfig.EXPORT_ROOT), plugin_folder, config_path)
 	for export_entry in config.get(KeysConfig.EXPORTS, []):
-		var folder = ExportFileUtils.replace_version(
-			export_entry.get(KeysConfig.Export.EXPORT_FOLDER), config_path)
-		var dir = root.path_join(folder)
-		if not DirAccess.dir_exists_absolute(dir):
+		var export_name = ExportFileUtils.get_export_name(export_entry, plugin_folder, config_path)
+		var folder = ExportFileUtils.get_export_folder(export_entry, config_path)
+		var dir = root.path_join(export_name).path_join(folder)
+		if folder == "" or not DirAccess.dir_exists_absolute(dir):
 			_fail("export produced no directory at " + dir)
 			continue
-		# "pet-reduced-0.1.0/plugin_exporter_test/" -> "pet-reduced"
-		_dirs[folder.get_slice("/", 0).get_slice("-0", 0)] = dir
+		# "pet-reduced-0.1.0/" -> "pet-reduced"
+		_dirs[export_name.get_slice("-0", 0)] = dir
+		_installs[dir] = "res://" + folder.trim_suffix("/")
 
 	return not _dirs.is_empty()
 
@@ -338,19 +342,14 @@ static func _test_every_reference_resolves() -> void:
 			broken.is_empty(), true)
 
 
-## Maps a reference as written back onto disk. Absolute paths are anchored at the export's plugin
-## directory, which is what "res://addons/<plugin>/" means once the plugin is installed.
+## Maps a reference as written back onto disk. Absolute paths are anchored at the export's install
+## path, which is what they mean once the plugin is installed.
 static func _resolve(target:String, from_file:String, dir:String) -> String:
-	if target.begins_with("res://addons/"):
-		var rest = target.trim_prefix("res://addons/")
-		var plugin_dir = rest.get_slice("/", 0)
-		if not rest.begins_with(plugin_dir + "/"):
-			return ""
-		if dir.get_file() != plugin_dir:
-			return "" # points at a different plugin, not this export's business
-		return dir.path_join(rest.trim_prefix(plugin_dir + "/"))
+	var install = String(_installs.get(dir, "")) + "/"
+	if target.begins_with(install):
+		return dir.path_join(target.trim_prefix(install))
 	if target.begins_with("res://"):
-		return "" # outside addons entirely, e.g. a deliberately ignored path
+		return "" # another plugin, or a deliberately ignored path - not this export's business
 	if target.begins_with("./") or target.begins_with("../"):
 		return from_file.get_base_dir().path_join(target).simplify_path()
 	return ""
@@ -372,13 +371,13 @@ static func _exists(dir:String, relative:String) -> bool:
 ## True when the variant's zip carries `relative`. The zip is written from a separate walk of the
 ## export, so a file being on disk is no proof it was packaged - hidden folders especially.
 static func _zipped(dir:String, relative:String) -> bool:
-	var plugin_dir = dir.trim_suffix("/")
-	var zip_path = plugin_dir.get_base_dir() + ".zip"
+	var install = String(_installs.get(dir, "")).trim_prefix("res://")
+	var zip_path = dir.trim_suffix("/").trim_suffix("/" + install) + ".zip"
 	var reader = ZIPReader.new()
 	if reader.open(zip_path) != OK:
 		_fail("no zip written at " + zip_path)
 		return false
-	var suffix = plugin_dir.get_file().path_join(relative)
+	var suffix = install.path_join(relative)
 	var found = false
 	for entry in reader.get_files():
 		if entry.ends_with(suffix):

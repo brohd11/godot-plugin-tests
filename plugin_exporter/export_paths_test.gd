@@ -1,0 +1,46 @@
+@tool
+extends EditorScript
+
+## Tests for export config path rules: export_folder is an install path anywhere under res://, and
+## the old "<package>/<folder>" form is caught by its {{...}} template instead of installing wrong.
+##
+##     load("res://tests/plugin_exporter/export_paths_test.gd").run_tests()
+
+const ExportPaths = preload("res://addons/plugin_exporter/src/class/export/export_paths.gd")
+
+static var _failures:Array[String] = []
+static var _passed:int = 0
+
+
+static func run_tests() -> Dictionary:
+	_failures = []
+	_passed = 0
+
+	_test_export_folder_error()
+
+	var output:Array[String] = []
+	output.append("export_paths: %d passed, %d failed" % [_passed, _failures.size()])
+	for failure in _failures:
+		output.append("  FAIL  " + failure)
+	return {"result": _failures.size(), "output": output}
+
+
+func _run() -> void: # EditorScript entry, for running this from the editor
+	print("\n".join(run_tests().output))
+
+
+static func _test_export_folder_error() -> void:
+	for valid in ["", "addons/x", "addons/addon_lib/x/", "lib/x", "res://lib/x"]:
+		_check("valid: '%s'" % valid, ExportPaths.export_folder_error(valid), "")
+	_check("absolute", ExportPaths.export_folder_error("/abs/x"), "is an absolute path")
+	_check("drive letter", ExportPaths.export_folder_error("C:/x"), "is an absolute path")
+	_check("leaves the project", ExportPaths.export_folder_error("addons/../../x"), "leaves the project")
+	_check("old form points at export_name",
+		"export_name" in ExportPaths.export_folder_error("brohd{{version=brohd}}/addon_lib/brohd"), true)
+
+
+static func _check(label:String, got, expected) -> void:
+	if got == expected:
+		_passed += 1
+		return
+	_failures.append("%s (expected %s, got %s)" % [label, expected, got])
