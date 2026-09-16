@@ -2,7 +2,7 @@ extends RefCounted
 ## Every way a struct loses its static type. The export has to refuse each one: once the struct is an
 ## Array, a field read through any of these compiles and only breaks at runtime.
 
-const StructVec = preload("res://addons/plugin_exporter_test/src/core/struct_vec.gd")
+const StructVec = preload("res://tests/gdscript_optimizer/fixtures/struct_vec.gd")
 
 signal changed(value)
 

@@ -26,6 +26,7 @@ const SUITES := [
 	{"name": "Nameless Enum + Lambda",   "script": "res://tests/gdscript_parser/nameless_enum_lambda_test.gd"},
 	{"name": "Lambda Scope",             "script": "res://tests/gdscript_parser/lambda_scope_test.gd"},
 	{"name": "Inline Lambdas",           "script": "res://tests/gdscript_parser/inline_lambda_test.gd"},
+	{"name": "Relative Preloads",        "script": "res://tests/gdscript_parser/relative_preload_test.gd"},
 ]
 
 

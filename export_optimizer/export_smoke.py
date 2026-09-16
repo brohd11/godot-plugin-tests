@@ -1,0 +1,175 @@
+"""Export a disposable project and run its PCK with the editor binary (no templates needed)."""
+
+import argparse
+import hashlib
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import tempfile
+import zipfile
+
+
+ROOT = Path(__file__).resolve().parents[2]
+FIXTURES = Path(__file__).parent / "fixtures"
+REFERENCES = re.compile(r'(?:preload\s*\(\s*|extends\s+)["\']([^"\'\n]+)["\']')
+
+
+def install_dependencies(project):
+    uid_map = {}
+    paths = subprocess.check_output(
+        ["rg", "--files", "--hidden", "-g", "*.uid", "-g", "!**/export_ignore/**", "addons", "namespace"],
+        cwd=ROOT, text=True,
+    ).splitlines()
+    for relative in paths:
+        sidecar = ROOT / relative
+        uid_map[sidecar.read_text().strip()] = sidecar.with_suffix("")
+    pending = [ROOT / "addons/export_optimizer/plugin.gd"]
+    copied = set()
+    while pending:
+        source = pending.pop()
+        if source in copied:
+            continue
+        copied.add(source)
+        target = project / source.relative_to(ROOT)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        sidecar = source.with_suffix(source.suffix + ".uid")
+        if sidecar.exists():
+            shutil.copy2(sidecar, target.with_suffix(target.suffix + ".uid"))
+        if source.suffix != ".gd":
+            continue
+        for reference in REFERENCES.findall(source.read_text()):
+            if not reference.startswith(("res://", "uid://")) and not reference.endswith(".gd"):
+                continue
+            if reference.startswith("uid://"):
+                dependency = uid_map[reference]
+            elif reference.startswith("res://"):
+                dependency = ROOT / reference[6:]
+            else:
+                dependency = (source.parent / reference).resolve()
+            if dependency.is_file():
+                pending.append(dependency)
+    shutil.copy2(ROOT / "addons/export_optimizer/plugin.cfg", project / "addons/export_optimizer/plugin.cfg")
+
+
+def run(godot, project, *args, expected_error=False):
+    result = subprocess.run(
+        [godot, "--headless", "--path", str(project), "--log-file", str(project / "run.log"), *args],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, timeout=120,
+    )
+    # Known shutdown noise also occurs with optimization disabled on the 4.6 Mono editor.
+    # Keep all script errors fatal, and exempt only these exact unrelated engine messages.
+    errors = [line for line in result.stdout.splitlines() if line.startswith("ERROR:")
+              and not re.match(r"ERROR: \d+ (resources still in use|RID allocations)", line)
+              and line != 'ERROR: EditorSettings not instantiated yet when getting setting "export/android/android_sdk_path".']
+    if result.returncode or "SCRIPT ERROR:" in result.stdout or (errors and not expected_error):
+        raise AssertionError(result.stdout)
+    return result.stdout
+
+
+def preset(enabled, mode):
+    return f'''[preset.0]
+name="Smoke"
+platform="Linux"
+runnable=true
+export_filter="all_resources"
+include_filter=""
+exclude_filter="addons/*,excluded.gd"
+script_export_mode={mode}
+
+[preset.0.options]
+optimization/structs={str(enabled).lower()}
+'''
+
+
+def hashes(project):
+    return {str(p.relative_to(project)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in project.rglob("*.gd") if ".godot" not in p.parts}
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--godot", required=True)
+    parser.add_argument("--plugin-package", type=Path,
+                        help="Test an exported addons/export_optimizer directory instead of development dependencies")
+    args = parser.parse_args()
+    project = Path(tempfile.mkdtemp(prefix="export-optimizer-smoke-"))
+    print(f"Smoke project: {project}", flush=True)
+    if args.plugin_package:
+        shutil.copytree(args.plugin_package, project / "addons/export_optimizer")
+    else:
+        install_dependencies(project)
+    for fixture in FIXTURES.glob("*.gd"):
+        if fixture.name != "invalid_struct.gd":
+            shutil.copy2(fixture, project / fixture.name)
+    (project / "excluded.gd").write_text('extends RefCounted\nconst VALUE = 9\n')
+    (project / "project.godot").write_text('''config_version=5
+[application]
+config/name="Optimizer Smoke"
+[editor_plugins]
+enabled=PackedStringArray("res://addons/export_optimizer/plugin.cfg")
+[rendering]
+renderer/rendering_method="gl_compatibility"
+''')
+    (project / "export_presets.cfg").write_text(preset(True, 0))
+    run(args.godot, project, "--editor", "--import")
+    uid = (project / "value.gd.uid").read_text().strip()
+    user = project / "user.gd"
+    user.write_text(user.read_text().replace('preload("value.gd")', f'preload("{uid}")'))
+    run(args.godot, project, "--editor", "--import")
+    before = hashes(project)
+    for enabled, mode in [(True, 0), (True, 1), (True, 2), (False, 2)]:
+        (project / "export_presets.cfg").write_text(preset(enabled, mode))
+        name = f"enabled-{enabled}-mode-{mode}"
+        archive = project.parent / f"{project.name}-{name}.zip"
+        run(args.godot, project, "--export-pack", "Smoke", str(archive))
+        with zipfile.ZipFile(archive) as package:
+            files = set(package.namelist())
+            assert "excluded.gd" not in files, files
+            assert not any(p.startswith("addons/") for p in files), files
+            if enabled:
+                assert "enum { X, Y }" in package.read("point.gd").decode()
+                assert "class_name OptimizerSmokePoint" in package.read("point.gd").decode()
+                assert '### GDScript Optimizer Structs' in package.read("blind.gd").decode()
+                assert ("main.gdc" in files) == (mode != 0), files
+            else:
+                assert "point.gdc" in files, files
+        pack = archive.with_suffix(".pck")
+        run(args.godot, project, "--export-pack", "Smoke", str(pack))
+        runtime_args = ["--main-pack", str(pack), "--script", "res://main.gd"]
+        if enabled:
+            runtime_args += ["--", "optimized"]
+        output = run(args.godot, project, *runtime_args)
+        assert "OPTIMIZER_SMOKE_OK" in output, output
+        assert hashes(project) == before, "Export changed project sources"
+        print(f"PASS {name}", flush=True)
+    # Inspect the stored bytes: custom runtime templates are only needed to decrypt the pack.
+    for pattern, encrypted in [("*.gd", True), ("*.gdc", False)]:
+        settings = preset(True, 2).replace("[preset.0.options]", f'''encrypt_pck=true
+encrypt_directory=false
+encryption_include_filters="{pattern}"
+encryption_exclude_filters=""
+script_encryption_key="{'ab' * 32}"
+
+[preset.0.options]''')
+        (project / "export_presets.cfg").write_text(settings)
+        pack = project.parent / f"{project.name}-encryption-{encrypted}.pck"
+        run(args.godot, project, "--export-pack", "Smoke", str(pack))
+        assert (b"enum { X, Y }" not in pack.read_bytes()) == encrypted
+        assert hashes(project) == before, "Encrypted export changed project sources"
+    print("PASS PCK encryption filters cover replacement .gd files", flush=True)
+    shutil.copy2(FIXTURES / "invalid_struct.gd", project / "invalid.gd")
+    (project / "export_presets.cfg").write_text(preset(True, 0))
+    failed = project.parent / f"{project.name}-fallback.zip"
+    output = run(args.godot, project, "--export-pack", "Smoke", str(failed), expected_error=True)
+    assert "Exporting original code; no optimizations were applied" in output, output
+    with zipfile.ZipFile(failed) as package:
+        assert package.read("point.gd").decode() == (project / "point.gd").read_text()
+        assert package.read("user.gd").decode() == user.read_text()
+    print("PASS invalid batch exports original code", flush=True)
+
+
+if __name__ == "__main__":
+    main()

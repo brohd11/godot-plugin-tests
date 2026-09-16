@@ -1,20 +1,20 @@
 @tool
 extends EditorScript
 
-## Tests for the text side of `#! struct` (parse/gd/struct/struct_rewrite.gd): reading a data-only
+## Tests for the text side of `#! struct` (passes/struct/struct_rewrite.gd): reading a data-only
 ## class, generating its array form, and rewriting constructor and type-hint sites.
 ##
-##     load("res://tests/plugin_exporter/struct_test.gd").run_tests()
+##     load("res://tests/gdscript_optimizer/struct_test.gd").run_tests()
 
-const StructRewrite = preload("res://addons/plugin_exporter/src/class/export/parse/gd/struct/struct_rewrite.gd")
-const StructTypes = preload("res://addons/plugin_exporter/src/class/export/parse/gd/struct/struct_types.gd")
+const StructRewrite = preload("res://addons/addon_lib/gdscript_optimizer/passes/struct/struct_rewrite.gd")
+const StructTypes = preload("res://addons/addon_lib/gdscript_optimizer/passes/struct/struct_types.gd")
 const GDScriptParser = preload("res://addons/addon_lib/gdscript_parser/gdscript_parser.gd")
 const P = "res://s.gd"
 
-const VEC = "res://addons/plugin_exporter_test/src/core/struct_vec.gd"
-const FIXTURE = "res://addons/plugin_exporter_test/src/core/struct_fixture.gd"
-const ACCESS = "res://addons/plugin_exporter_test/src/core/struct_access.gd"
-const UNTYPED = "res://tests/plugin_exporter/fixtures/struct/untyped_scenario.gd"
+const VEC = "res://tests/gdscript_optimizer/fixtures/struct_vec.gd"
+const FIXTURE = "res://tests/gdscript_optimizer/fixtures/struct_fixture.gd"
+const ACCESS = "res://tests/gdscript_optimizer/fixtures/struct_access.gd"
+const UNTYPED = "res://tests/gdscript_optimizer/fixtures/untyped_scenario.gd"
 
 static var _failures:Array[String] = []
 static var _passed:int = 0

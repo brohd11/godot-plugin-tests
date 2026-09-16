@@ -4,8 +4,6 @@ extends SceneTree
 
 const SUITES:PackedStringArray = [
 	"res://tests/plugin_exporter/dependency_tags_test.gd",
-	"res://tests/plugin_exporter/tag_registry_test.gd",
-	"res://tests/plugin_exporter/struct_test.gd",
 	"res://tests/plugin_exporter/access_reduction_test.gd",
 	"res://tests/plugin_exporter/license_resolution_test.gd",
 	"res://tests/plugin_exporter/dep_resolver_test.gd",

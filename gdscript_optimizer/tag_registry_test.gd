@@ -1,14 +1,14 @@
 @tool
 extends EditorScript
 
-## Tests for plugin_exporter's TagRegistry - `#!` tags resolved to the member, file or line they
+## Tests for the shared TagRegistry - `#!` tags resolved to the member, file or line they
 ## are attached to, keyed by parser type path.
 ##
-##     load("res://tests/plugin_exporter/tag_registry_test.gd").run_tests()
+##     load("res://tests/gdscript_optimizer/tag_registry_test.gd").run_tests()
 
-const TagRegistry = preload("res://addons/plugin_exporter/src/class/export/tag_registry.gd")
+const TagRegistry = preload("res://addons/addon_lib/gdscript_optimizer/tag_registry.gd")
 const P = "res://t.gd"
-const DIR = "user://pe_tag_registry_tests/"
+const DIR = "user://gdscript_optimizer_tag_registry_tests/"
 
 static var _failures:Array[String] = []
 static var _passed:int = 0
