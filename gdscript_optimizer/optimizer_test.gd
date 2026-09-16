@@ -13,6 +13,7 @@ static func run_tests() -> Dictionary:
 	_test_prepare_and_replay()
 	_test_failure_and_reset()
 	_test_selection_and_mapping()
+	_test_invalid_tag_attachments()
 	var output:Array = ["optimizer: %d passed, %d failed" % [_passed, _failures.size()]]
 	output.append_array(_failures)
 	return {"result": _failures.size(), "output": output}
@@ -91,6 +92,22 @@ static func _test_selection_and_mapping() -> void:
 	_check("replacement identity remains logical", optimizer.planned_files().has("res://logical/vec.gd"), true)
 	var blind = _render(optimizer, BASE + "struct_blind.gd")
 	_check("injection uses host output path", blind.contains('preload("../relocated/vec.gd")'), true)
+
+
+static func _test_invalid_tag_attachments() -> void:
+	var path := "user://optimizer_tag_attachment.gd"
+	for source:String in [
+		"extends RefCounted\n#! struct",
+		"extends RefCounted\nfunc f():\n\t#! struct\n\tprint(1)",
+		"extends RefCounted\nfunc f():\n\t#! struct\n\tvar local = 1",
+	]:
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		file.store_string(source)
+		file.close()
+		var optimizer = Optimizer.new()
+		var result = optimizer.prepare({path: path}, Optimizer.Context.new())
+		_check("unsupported struct attachment is reported", result.errors.size(), 1)
+	DirAccess.remove_absolute(path)
 
 
 static func _render(optimizer, key:String) -> String:
