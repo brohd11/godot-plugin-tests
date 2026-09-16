@@ -20,6 +20,7 @@ extends RefCounted
 ##     Godot --headless --path . --script res://tests/syntax_plus/run_headless.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
+const LspSupport = preload("res://tests/syntax_plus/lsp_support.gd")
 const HighlighterLogic = preload("res://addons/syntax_plus/src/highlighter/highlighter_logic.gd")
 
 const SCENARIO := "res://tests/syntax_plus/scenarios/scenario_spans.gd"
@@ -36,21 +37,24 @@ static func run_tests() -> Dictionary:
 static func _run(out: Array) -> int:
 	var fails := 0
 	fails += _run_mode(out, false)
-	if ClassDB.class_exists("GDScriptTreeSitter"):
+	if LspSupport.available():
 		fails += _run_mode(out, true)
 	else:
-		out.append("\n  (GDScriptTreeSitter not registered - tree-sitter mode skipped)")
+		out.append("\n  " + LspSupport.skip_line("Syntax Plus Line Data native mode"))
 	fails += _test_degenerate_class(out)
 
 	out.append("\nSYNTAX PLUS LINE DATA: %s" % ("ALL PASS" if fails == 0 else "%d FAILED" % fails))
 	return fails
 
 
-static func _run_mode(out: Array, use_tree_sitter: bool) -> int:
-	var mode: String = "tree-sitter" if use_tree_sitter else "plain-text"
+static func _run_mode(out: Array, use_native: bool) -> int:
+	var mode: String = "native" if use_native else "plain-text"
 	out.append("\n=============== SYNTAX PLUS LINE DATA (%s) ===============" % mode)
 
-	var parser := _make_parser(use_tree_sitter)
+	var parser := _make_parser(use_native)
+	if use_native and not LspSupport.engaged(parser):
+		out.append("  FAIL  native backend requested but the parse fell back to plain text")
+		return 1
 	var class_names := parser.get_classes()
 	var line_data: Dictionary = HighlighterLogic._line_data_from_parser(parser, class_names)
 
@@ -110,7 +114,7 @@ static func _run_mode(out: Array, use_tree_sitter: bool) -> int:
 ## it crashes, which is what the old inline plain-text traversal did.
 static func _test_degenerate_class(out: Array) -> int:
 	out.append("\n  -- degenerate input")
-	var parser := _make_parser(ClassDB.class_exists("GDScriptTreeSitter"))
+	var parser := _make_parser(LspSupport.available())
 	var bare = GDScriptParser.ParserClass.new()
 	bare.access_path = "Bare"
 	parser._class_access["Bare"] = bare
@@ -139,10 +143,10 @@ static func _ensure_global_class_registry() -> void:
 		ucd.global_class_registry = ucd.get_all_global_class_paths()
 
 
-static func _make_parser(use_tree_sitter: bool) -> GDScriptParser:
+static func _make_parser(use_native: bool) -> GDScriptParser:
 	_ensure_global_class_registry()
 	var parser := GDScriptParser.new()
-	parser.set_use_tree_sitter(use_tree_sitter) # before parse(); forces the parse path under test
+	parser.set_use_native_backend(use_native) # before parse(); forces the parse path under test
 	parser.set_autoload_cache()
 	parser.set_parser_cache({})
 	parser.set_parser_cache_size(40)

@@ -13,6 +13,7 @@ extends SceneTree
 ##     Godot --headless --path . --script res://tests/gdscript_parser/member_metadata_test.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
+const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const Keys = GDScriptParser.Keys
 const UString = GDScriptParser.UString
 
@@ -46,24 +47,28 @@ static func _run(out: Array) -> int:
 	_clear_test_cache_dir()
 	var failures := 0
 
-	# Tree-sitter is a GDExtension that isn't registered under `--headless --script`; the parser keys
-	# its own default off this (gdscript_parser.gd). Force it on only when present, else the forced
-	# parse yields an empty parser (0 classes, write_cache() returns false). Plain-text always runs.
-	var ts := ClassDB.class_exists("GDScriptTreeSitter")
-	var modes: Array = [false, true] if ts else [false]
-	if not ts:
-		out.append("  (GDScriptTreeSitter not registered - tree-sitter parse mode skipped)")
+	# The native backend needs the editor-owned LSP service. Probe for it rather than a class name:
+	# without the service code_edit_parser.gd silently falls back to the text parser, which would make
+	# this loop run plain-text twice and report it as two passes. Plain-text always runs.
+	var native := LspSupport.available()
+	var modes: Array = [false, true] if native else [false]
+	if not native:
+		out.append("  " + LspSupport.skip_line("Member Metadata native mode"))
 
 	for path in FIXTURES:
-		for use_tree_sitter in modes:
-			var parser := _make_parser(path, use_tree_sitter)
-			var label: String = "tree-sitter" if use_tree_sitter else "plain-text"
+		for use_native in modes:
+			var parser := _make_parser(path, use_native)
+			if use_native and not LspSupport.engaged(parser):
+				out.append("  FAIL  %s -> native backend requested but the parse fell back to plain text" % path.get_file())
+				failures += 1
+				continue
+			var label: String = "native" if use_native else "plain-text"
 			failures += _check_parser(out, parser, path, "%s (%s)" % [path.get_file(), label])
 
 	# The same assertions after a disk round-trip: the cache must not drop or blank the fields.
-	# Round-trips whichever parse mode is available (tree-sitter in-editor, plain-text headless).
+	# Round-trips whichever parse mode is available (native in-editor, plain-text headless).
 	for path in FIXTURES:
-		var parser := _make_parser(path, ts)
+		var parser := _make_parser(path, native)
 		if not parser.write_cache():
 			out.append("  FAIL  %s (cached) -> write_cache() returned false" % path.get_file())
 			failures += 1
@@ -157,7 +162,7 @@ static func _check_parser(out: Array, parser: GDScriptParser, script_path: Strin
 ## The symptom that surfaced the bug: an inherited constant is dropped when its member data cannot
 ## name the script that owns it (parser_class.gd::get_gdscript_constants can't get a parser for it).
 static func _check_inherited_constants(out: Array) -> int:
-	var parser := _make_parser(DERIVED, ClassDB.class_exists("GDScriptTreeSitter"))
+	var parser := _make_parser(DERIVED, LspSupport.available())
 	var class_obj = parser.get_class_object("")
 	var constants: Dictionary = class_obj.get_gdscript_constants(true)
 
@@ -180,13 +185,13 @@ static func _check_inherited_constants(out: Array) -> int:
 	return failures
 
 
-static func _make_parser(script_path: String, use_tree_sitter := true) -> GDScriptParser:
+static func _make_parser(script_path: String, use_native := true) -> GDScriptParser:
 	var parser := GDScriptParser.new()
 	parser.set_autoload_cache()
 	parser.set_parser_cache({})
 	parser.set_parser_cache_size(40)
 	parser.set_parse_cache_dir(TEST_CACHE_DIR)
-	parser.set_use_tree_sitter(use_tree_sitter) # before parse(); forces the parse path under test
+	parser.set_use_native_backend(use_native) # before parse(); forces the parse path under test
 	parser.active_parser = parser
 	var script: GDScript = load(script_path)
 	parser.set_current_script(script)

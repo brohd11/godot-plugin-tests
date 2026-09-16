@@ -6,6 +6,7 @@ extends SceneTree
 ##     Godot --headless --path . --script res://tests/gdscript_parser/nameless_enum_lambda_test.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
+const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const Keys = GDScriptParser.Keys
 
 const FIXTURE := "res://tests/gdscript_parser/fixtures/gp_enum_lambda.gd"
@@ -35,21 +36,24 @@ static func run_tests() -> Dictionary:
 static func _run(out: Array) -> int:
 	_ensure_global_class_registry()
 	_clear_test_cache_dir()
-	# Tree-sitter isn't registered under `--headless --script`; it runs from the editor console.
-	var ts := ClassDB.class_exists("GDScriptTreeSitter")
-	var modes: Array = [false, true] if ts else [false]
-	if not ts:
-		out.append("  (GDScriptTreeSitter not registered - tree-sitter parse mode skipped)")
+	# The native backend needs the editor-owned LSP service; it runs from the editor console.
+	var native := LspSupport.available()
+	var modes: Array = [false, true] if native else [false]
+	if not native:
+		out.append("  " + LspSupport.skip_line("Nameless Enum + Lambda native mode"))
 
 	var failures := 0
-	for use_ts in modes:
-		var label: String = "tree-sitter" if use_ts else "plain-text"
-		var parser := _make_parser(use_ts)
+	for use_native in modes:
+		var label: String = "native" if use_native else "plain-text"
+		var parser := _make_parser(use_native)
+		if use_native and not LspSupport.engaged(parser):
+			failures += _expect(out, false, "%s: native backend requested but the parse fell back to plain text" % label)
+			continue
 		failures += _check_enums(out, parser, label)
 		failures += _check_lambdas(out, parser, label)
 		_clear_test_cache_dir() # each mode writes and reads its own .bin
-		failures += _check_cache(out, use_ts)
-	if ts:
+		failures += _check_cache(out, use_native)
+	if native:
 		failures += _check_parity(out)
 	_clear_test_cache_dir()
 
@@ -152,14 +156,14 @@ static func _check_lambdas(out: Array, parser: GDScriptParser, label: String) ->
 	return f
 
 
-## Plain-text must fold into the same data tree-sitter emits.
+## Plain-text must fold into the same data the native backend emits.
 static func _check_parity(out: Array) -> int:
 	var f := 0
 	var plain = _make_parser(false)
-	var ts = _make_parser(true)
+	var native = _make_parser(true)
 	for access_path in ["", "Inner"]:
 		var p_consts: Dictionary = plain.get_class_object(access_path).constants
-		var t_consts: Dictionary = ts.get_class_object(access_path).constants
+		var t_consts: Dictionary = native.get_class_object(access_path).constants
 		f += _expect(out, _str_keys(p_consts) == _str_keys(t_consts),
 			"parity: '%s' constant names %s != %s" % [access_path, _str_keys(p_consts), _str_keys(t_consts)])
 		for entry_name in t_consts:
@@ -172,7 +176,7 @@ static func _check_parity(out: Array) -> int:
 					"parity: '%s' %s plain '%s' != ts '%s'" % [entry_name, field, p_consts[entry_name].get(field), t_data.get(field)])
 
 	var p_root = plain.get_class_object("")
-	var t_root = ts.get_class_object("")
+	var t_root = native.get_class_object("")
 	for lambda_name in t_root.lambdas:
 		var t_lam = t_root.lambdas[lambda_name]
 		var p_lam = p_root.lambdas.get(lambda_name)
@@ -184,13 +188,13 @@ static func _check_parity(out: Array) -> int:
 	f += _expect(out, _str_keys(p_local) == _str_keys(t_local), "parity: local lambdas %s != %s" % [_str_keys(p_local), _str_keys(t_local)])
 
 	if f == 0:
-		out.append("  PASS  plain-text / tree-sitter parity")
+		out.append("  PASS  plain-text / native parity")
 	return f
 
 
-static func _check_cache(out: Array, use_ts: bool) -> int:
+static func _check_cache(out: Array, use_native: bool) -> int:
 	var f := 0
-	var parser := _make_parser(use_ts)
+	var parser := _make_parser(use_native)
 	var root = parser.get_class_object("")
 	var want_args := _arg_shape(root.get_lambda("typed_lambda").get_arguments()) # populate before writing
 	root.get_function("with_locals").get_lambdas()
@@ -210,7 +214,7 @@ static func _check_cache(out: Array, use_ts: bool) -> int:
 	f += _expect(out, str(r_root.constants.get("NEXT", {}).get(Keys.ASSIGNMENT)) == "NEG + 1", "cache: enum entry not restored")
 
 	if f == 0:
-		out.append("  PASS  cache round-trip (%s)" % ("tree-sitter" if use_ts else "plain-text"))
+		out.append("  PASS  cache round-trip (%s)" % ("native" if use_native else "plain-text"))
 	return f
 
 
@@ -237,13 +241,13 @@ static func _expect(out: Array, condition: bool, message: String) -> int:
 	return 1
 
 
-static func _make_parser(use_tree_sitter: bool) -> GDScriptParser:
+static func _make_parser(use_native: bool) -> GDScriptParser:
 	var parser := GDScriptParser.new()
 	parser.set_autoload_cache()
 	parser.set_parser_cache({})
 	parser.set_parser_cache_size(40)
 	parser.set_parse_cache_dir(TEST_CACHE_DIR)
-	parser.set_use_tree_sitter(use_tree_sitter) # before parse(); forces the parse path under test
+	parser.set_use_native_backend(use_native) # before parse(); forces the parse path under test
 	parser.active_parser = parser
 	var script: GDScript = load(FIXTURE)
 	parser.set_current_script(script)

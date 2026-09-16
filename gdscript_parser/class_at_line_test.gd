@@ -19,6 +19,7 @@ extends RefCounted
 ##     Godot --headless --path . --script res://tests/gdscript_parser/run_all_headless.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
+const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 
 const DIR := "res://tests/gdscript_parser/"
 const BASIC := DIR + "scenarios/scenario_basic.gd"
@@ -47,24 +48,27 @@ static func run_tests() -> Dictionary:
 	return {"result": _run(out), "output": out}
 
 
-## Both parse paths: plain text (root range excludes inner classes) and tree-sitter (root range spans
-## the whole file). Only the latter can hit the ambiguity, but the lookup must agree in both.
+## Both parse paths: plain text (root range excludes inner classes) and the native backend (root range
+## spans the whole file). Only the latter can hit the ambiguity, but the lookup must agree in both.
 static func _run(out: Array) -> int:
 	var fails := 0
 	fails += _run_mode(out, false)
-	if ClassDB.class_exists("GDScriptTreeSitter"):
+	if LspSupport.available():
 		fails += _run_mode(out, true)
 	else:
-		out.append("\n  (GDScriptTreeSitter not registered - tree-sitter mode skipped)")
+		out.append("\n  " + LspSupport.skip_line("Class At Line native mode"))
 	out.append("\nCLASS AT LINE: %s" % ("ALL PASS" if fails == 0 else "%d FAILED" % fails))
 	return fails
 
 
-static func _run_mode(out: Array, use_tree_sitter: bool) -> int:
-	var mode_label: String = "tree-sitter" if use_tree_sitter else "plain-text"
+static func _run_mode(out: Array, use_native: bool) -> int:
+	var mode_label: String = "native" if use_native else "plain-text"
 	out.append("\n=============== CLASS AT LINE (%s) ===============" % mode_label)
 
-	var parser := _make_parser(BASIC, use_tree_sitter)
+	var parser := _make_parser(BASIC, use_native)
+	if use_native and not LspSupport.engaged(parser):
+		out.append("  FAIL  native backend requested but the parse fell back to plain text")
+		return 1
 	var lines := PackedStringArray(load(BASIC).source_code.split("\n"))
 
 	var fails := 0
@@ -142,10 +146,10 @@ static func _ensure_global_class_registry() -> void:
 		ucd.global_class_registry = ucd.get_all_global_class_paths()
 
 
-static func _make_parser(script_path: String, use_tree_sitter := true) -> GDScriptParser:
+static func _make_parser(script_path: String, use_native := true) -> GDScriptParser:
 	_ensure_global_class_registry()
 	var parser := GDScriptParser.new()
-	parser.set_use_tree_sitter(use_tree_sitter) # before parse(); forces the parse path under test
+	parser.set_use_native_backend(use_native) # before parse(); forces the parse path under test
 	parser.set_autoload_cache()
 	parser.set_parser_cache({})
 	parser.set_parser_cache_size(40)

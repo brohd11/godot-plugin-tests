@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Parser = preload("res://addons/addon_lib/gdscript_parser/gdscript_parser.gd")
+const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const SOURCE = "extends RefCounted\nvar callbacks = [func(a: int): return a, func(b: String): return b]\nfunc run(captured: Color):\n\tvar before: int = 1\n\t[1].map(func(value: int):\n\t\tvar own: String = str(value)\n\t\t[2].map(func(inner: int): return inner + before)\n\t\treturn own\n\t)\n\tvar assigned = func(arg: int): return arg\n\tvar after: int = 2\n"
 
 func _init() -> void:
@@ -20,22 +21,29 @@ static func _check(out:Array, condition:bool, label:String) -> int:
 
 static func _run(out:Array) -> int:
 	var failures:int = 0
-	if not ClassDB.class_exists("GDScriptTreeQuery"):
-		return _check(out, false, "tree-sitter must be loaded to verify both modes")
+	# Only _range_parity needs a backend; everything below exercises the parser itself, so it must run
+	# whether or not the LSP is present.
 	failures += _range_parity(out)
 	var ucd = Parser.UClassDetail
 	if ucd.global_class_registry.is_empty():
 		ucd.global_class_registry = ucd.get_all_global_class_paths()
-	for use_ts:bool in [false, true]:
+	var native := LspSupport.available()
+	var modes: Array = [false, true] if native else [false]
+	if not native:
+		out.append("  " + LspSupport.skip_line("Inline Lambdas native mode"))
+	for use_native:bool in modes:
 		var parser = Parser.new()
 		parser.set_parser_cache({})
-		parser.set_use_tree_sitter(use_ts)
+		parser.set_use_native_backend(use_native)
 		parser.active_parser = parser
 		parser.set_current_script(load("res://tests/gdscript_parser/fixtures/gp_lambda_scope.gd"))
 		parser.set_source_code(SOURCE)
 		parser.parse(true)
 		var root = parser.get_class_object("")
-		var label:String = "tree-sitter" if use_ts else "plain"
+		var label:String = "native" if use_native else "plain"
+		if use_native and not LspSupport.engaged(parser):
+			failures += _check(out, false, label + ": backend requested but the parse fell back to plain text")
+			continue
 		failures += _check(out, root.lambdas.size() == 2, label + " class callbacks")
 		var first = root.get_lambda_at_line(1, 35)
 		var second = root.get_lambda_at_line(1, 65)
@@ -89,16 +97,32 @@ static func _range_parity(out:Array) -> int:
 		"func run():\n\treturn func(): return func(): return 1\n",
 		"# func(): nope\nvar text = \"\"\"func():\n fake\"\"\"\nvar a = func(): return \"func(): \\\"ignored\\\"\" # func(): ignored\n",
 	]
+	# The oracle is the native service used directly: update_document()/document() need no CodeEdit and
+	# no EditorNode, so this parity check does not depend on the editor-owned service node.
+	var svc = LspSupport.new_service()
+	if svc == null:
+		out.append("  " + LspSupport.skip_line("Inline Lambdas range parity",
+			"GDScriptLanguageService not registered"))
+		return 0
+	var revision:int = 0
 	for source:String in fixtures:
 		var scanned:Array = []
 		_scan_ranges(Parser.CodeEditParser.LambdaScanner.scan(source), scanned)
-		var query = GDScriptTreeQuery.new()
-		query.open_text(source)
+		revision += 1
+		var uri:String = "untitled:inline-lambda-parity/%d" % revision
+		svc.update_document(uri, source, revision)
+		var doc = svc.document(uri)
+		if doc == null:
+			failures += _check(out, false, "no document for %s" % uri)
+			continue
+		var data:Dictionary = doc.parse_script(uri)
 		var extracted:Array = []
-		for path:String in query.get_classes():
-			_query_ranges(query.get_lambdas(path), extracted)
-			for member:Dictionary in query.get_members(path).values():
+		for path:String in data.keys():
+			var cls_data:Dictionary = data[path]
+			_query_ranges(cls_data.get("lambdas", {}), extracted)
+			for member:Dictionary in cls_data.get("members", {}).values():
 				_query_ranges(member.get("lambdas", {}), extracted)
+		svc.close_document(uri)
 		scanned.sort()
 		extracted.sort()
 		failures += _check(out, scanned == extracted, "scanner ranges %s != %s for %s" % [scanned, extracted, source])
@@ -109,7 +133,10 @@ static func _scan_ranges(entries:Array, result:Array) -> void:
 		result.append("%s:%s-%s:%s" % [entry.line_index, entry.column_index, entry.end_line, entry.end_column])
 		_scan_ranges(entry._children, result)
 
+## The native projection keys a lambda's start line as `line_index` (tree-sitter-gd called it `line`),
+## and nests child lambdas under `lambdas`. Columns are byte columns on both sides, so the two range
+## sets stay directly comparable with the scanner's.
 static func _query_ranges(entries:Dictionary, result:Array) -> void:
 	for entry:Dictionary in entries.values():
-		result.append("%s:%s-%s:%s" % [entry.line, entry.column_index, entry.end_line, entry.end_column])
-		_query_ranges(entry.lambdas, result)
+		result.append("%s:%s-%s:%s" % [entry.line_index, entry.column_index, entry.end_line, entry.end_column])
+		_query_ranges(entry.get("lambdas", {}), result)

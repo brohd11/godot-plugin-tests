@@ -16,6 +16,7 @@ extends RefCounted
 ##     Godot --headless --path . --script res://tests/gdscript_parser/run_all_headless.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
+const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 
 const DIR := "res://tests/gdscript_parser/"
 const SCENARIO := DIR + "scenarios/scenario_live_edit.gd"
@@ -33,10 +34,10 @@ static func run_tests() -> Dictionary:
 
 static func _run(out: Array) -> int:
 	out.append("\n=============== LIVE EDIT LINES ===============")
-	# sync_line_ranges() reads the tree-sitter tree; the plain-text path has no cheap equivalent.
-	if not ClassDB.class_exists("GDScriptTreeSitter"):
-		out.append("  (GDScriptTreeSitter not registered - suite skipped)")
-		out.append("\nLIVE EDIT LINES: ALL PASS (skipped)")
+	# sync_line_ranges() reads the native backend's tree; the plain-text path has no cheap equivalent.
+	if not LspSupport.available():
+		out.append("  " + LspSupport.skip_line("Live Edit Lines"))
+		out.append("\nLIVE EDIT LINES: SKIPPED (no native backend)")
 		return 0
 
 	var fails := 0
@@ -282,7 +283,7 @@ static func _ensure_global_class_registry() -> void:
 static func _make_parser() -> GDScriptParser:
 	_ensure_global_class_registry()
 	var parser := GDScriptParser.new()
-	parser.set_use_tree_sitter(true)
+	parser.set_use_native_backend(true)
 	parser.set_autoload_cache()
 	parser.set_parser_cache({})
 	parser.set_parser_cache_size(40)

@@ -5,6 +5,7 @@ extends SceneTree
 ##     Godot --headless --path . --script res://tests/gdscript_parser/lambda_scope_test.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
+const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const Keys = GDScriptParser.Keys
 
 const FIXTURE := "res://tests/gdscript_parser/fixtures/gp_lambda_scope.gd"
@@ -45,13 +46,13 @@ static func run_tests() -> Dictionary:
 
 static func _run(out: Array) -> int:
 	_ensure_global_class_registry()
-	var ts := ClassDB.class_exists("GDScriptTreeSitter")
-	var modes: Array = [false, true] if ts else [false]
-	if not ts:
-		out.append("  (GDScriptTreeSitter not registered - tree-sitter parse mode skipped)")
+	var native := LspSupport.available()
+	var modes: Array = [false, true] if native else [false]
+	if not native:
+		out.append("  " + LspSupport.skip_line("Lambda Scope native mode"))
 	var failures := 0
-	for use_ts in modes:
-		failures += _run_mode(out, use_ts, "tree-sitter" if use_ts else "plain-text")
+	for use_native in modes:
+		failures += _run_mode(out, use_native, "native" if use_native else "plain-text")
 	out.append("")
 	if failures == 0:
 		out.append("LAMBDA SCOPE: ALL PASS")
@@ -60,9 +61,11 @@ static func _run(out: Array) -> int:
 	return failures
 
 
-static func _run_mode(out: Array, use_ts: bool, label: String) -> int:
+static func _run_mode(out: Array, use_native: bool, label: String) -> int:
 	var f := 0
-	var parser := _make_parser(use_ts)
+	var parser := _make_parser(use_native)
+	if use_native and not LspSupport.engaged(parser):
+		return _expect(out, false, "%s: native backend requested but the parse fell back to plain text" % label)
 	var class_obj = parser.get_class_object("")
 	var lines: PackedStringArray = (load(FIXTURE) as GDScript).source_code.split("\n")
 
@@ -110,12 +113,12 @@ static func _expect(out: Array, condition: bool, message: String) -> int:
 	return 1
 
 
-static func _make_parser(use_tree_sitter: bool) -> GDScriptParser:
+static func _make_parser(use_native: bool) -> GDScriptParser:
 	var parser := GDScriptParser.new()
 	parser.set_autoload_cache()
 	parser.set_parser_cache({})
 	parser.set_parser_cache_size(40)
-	parser.set_use_tree_sitter(use_tree_sitter) # before parse(); forces the parse path under test
+	parser.set_use_native_backend(use_native) # before parse(); forces the parse path under test
 	parser.active_parser = parser
 	var script: GDScript = load(FIXTURE)
 	parser.set_current_script(script)

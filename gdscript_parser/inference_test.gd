@@ -15,6 +15,7 @@ extends RefCounted
 ##     Godot --headless --path . --script res://tests/gdscript_parser/run_inference_headless.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
+const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const Keys = GDScriptParser.Keys
 
 const DIR := "res://tests/gdscript_parser/"
@@ -143,17 +144,20 @@ static func _run(out: Array, probe_all_mode := false) -> int:
 	var fails := 0
 	# Plain-text parse path - always runnable, and where the map_variables terminal-line fix applies.
 	fails += _run_mode(out, false, probe_all_mode)
-	# Tree-sitter parse path - only when the GDScriptTreeSitter extension is registered.
-	if ClassDB.class_exists("GDScriptTreeSitter"):
+	# Native parse path - only when the LSP backend can actually serve a parse.
+	if LspSupport.available():
 		fails += _run_mode(out, true, probe_all_mode)
 	else:
-		out.append("\n  (GDScriptTreeSitter not registered - tree-sitter mode skipped)")
+		out.append("\n  " + LspSupport.skip_line("Inference native mode"))
 	return fails
 
 
-static func _run_mode(out: Array, use_tree_sitter: bool, probe_all_mode := false) -> int:
+static func _run_mode(out: Array, use_native: bool, probe_all_mode := false) -> int:
 	_ensure_global_class_registry()
-	var parser := _make_parser(SCENARIO, use_tree_sitter)
+	var parser := _make_parser(SCENARIO, use_native)
+	if use_native and not LspSupport.engaged(parser):
+		out.append("\n  FAIL  native backend requested but the parse fell back to plain text")
+		return 1
 	var cobj = parser.get_class_object("")
 	# Cache of mapped functions: func_name -> { fobj, name_map(plain_name -> mangled key) }.
 	# Most cases target FUNC (infer_cases); a case may set `func` to target another function.
@@ -163,7 +167,7 @@ static func _run_mode(out: Array, use_tree_sitter: bool, probe_all_mode := false
 		out.append("[SETUP FAIL] function '%s' not found in %s" % [FUNC, SCENARIO])
 		return 1
 
-	var mode_label: String = "tree-sitter" if use_tree_sitter else "plain-text"
+	var mode_label: String = "native" if use_native else "plain-text"
 	out.append("\n=============== INFERENCE TESTS (%s) ===============" % mode_label)
 	out.append("  locals mapped: %d" % primary.fobj.local_vars.size())
 
@@ -290,10 +294,10 @@ static func _map_func(cobj, func_name: String, cache: Dictionary) -> Dictionary:
 	return data
 
 
-static func _make_parser(script_path: String, use_tree_sitter := true) -> GDScriptParser:
+static func _make_parser(script_path: String, use_native := true) -> GDScriptParser:
 	_ensure_global_class_registry()
 	var parser := GDScriptParser.new()
-	parser.set_use_tree_sitter(use_tree_sitter) # before parse(); forces the parse path under test
+	parser.set_use_native_backend(use_native) # before parse(); forces the parse path under test
 	parser.set_autoload_cache()
 	parser.set_parser_cache({})
 	parser.set_parser_cache_size(40)

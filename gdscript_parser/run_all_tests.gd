@@ -55,5 +55,11 @@ static func fill(out: Array) -> int:
 	for s in SUITES:
 		out.append("\n########## %s ##########" % s.name)
 		total += load(s.script)._run(out)
-	out.append("\n================= TOTAL FAILURES: %d =================" % total)
+	# A suite that skipped its backend-dependent work must never read as a clean pass. Suites emit the
+	# standard "SKIP:" line (lsp_support.gd), so count those and report them next to the failures.
+	var skipped := 0
+	for line in out:
+		if str(line).strip_edges().begins_with("SKIP:"):
+			skipped += 1
+	out.append("\n================= TOTAL FAILURES: %d   SKIPPED: %d =================" % [total, skipped])
 	return total
