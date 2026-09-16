@@ -1,7 +1,7 @@
 extends Node
 
 const Workloads = preload("workloads.gd")
-const CASES = ["allocation", "arithmetic", "script_calls", "engine_calls", "vectors", "inline_calls"]
+const CASES = ["allocation", "arithmetic", "script_calls", "engine_calls", "vectors", "inline_calls", "reference_allocation", "reference_reads"]
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()

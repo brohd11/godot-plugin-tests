@@ -50,16 +50,18 @@ renderer/rendering_method="gl_compatibility"
     before = hashes(project)
     variants = []
     for inline in (False, True):
-        variants.append((f"objects-inline{int(inline)}", False, False, 0, inline))
+        variants.append((f"objects-inline{int(inline)}", False, False, 0, inline, False))
         for scalar in (False, True):
             for mode in range(3):
                 name = f"structs-scalar{int(scalar)}-reads{mode}-inline{int(inline)}"
-                variants.append((name, True, scalar, mode, inline))
+                variants.append((name, True, scalar, mode, inline, False))
+                if scalar or mode:
+                    variants.append((name + "-refs", True, scalar, mode, inline, True))
     metadata = {}
-    for name, structs, scalar, mode, inline in variants:
+    for name, structs, scalar, mode, inline, references in variants:
         directory = output / name
         directory.mkdir()
-        (project / "export_presets.cfg").write_text(preset(structs, 0, inline, scalar, mode))
+        (project / "export_presets.cfg").write_text(preset(project, structs, 0, inline, scalar, mode, references))
         archive = directory / "source.zip"
         log = run(args.godot, project, "--export-pack", "Smoke", str(archive))
         assert "Exporting original code" not in log, log
@@ -71,7 +73,7 @@ renderer/rendering_method="gl_compatibility"
         assert hashes(project) == before, "Export modified source files"
         stats_match = re.search(r"struct stats=(\{[^\n]+\})", log)
         metadata[name] = {"structs": structs, "scalar": scalar, "read_types": mode,
-                          "inline": inline, "stats": json.loads(stats_match[1]) if stats_match else {}}
+                          "inline": inline, "allow_ref_counted": references, "stats": json.loads(stats_match[1]) if stats_match else {}}
         print(f"Exported {name}", flush=True)
     runtime = args.release_runtime or args.godot
     samples = {name: [] for name in metadata}

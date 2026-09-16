@@ -76,3 +76,31 @@ static func inline_loop(point: Point, count: int) -> float:
 		var increment: float = affine(point.x)
 		total += increment
 	return total
+
+
+class Payload:
+	var value:float = 3.0
+
+#! struct
+class Reference:
+	var payload:Payload
+	func _init(p:Payload) -> void:
+		payload = p
+
+static func reference_allocation(count:int) -> float:
+	var payload := Payload.new()
+	var total := 0.0
+	for i in count:
+		var record := Reference.new(payload)
+		total += record.payload.value
+	return total
+
+static func reference_reads(count:int) -> float:
+	return reference_loop(Reference.new(Payload.new()), count)
+
+static func reference_loop(record:Reference, count:int) -> float:
+	var total := 0.0
+	for i in count:
+		var payload = record.payload
+		total += payload.value
+	return total
