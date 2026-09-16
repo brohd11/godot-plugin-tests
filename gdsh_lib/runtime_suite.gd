@@ -15,6 +15,7 @@ var report:Array[String] = []
 func run_sync():
 	_test_loading()
 	_test_streams()
+	_test_str()
 	_test_paths()
 	_test_filesystem()
 	_test_class()
@@ -87,10 +88,59 @@ func _test_streams():
 	check(run("grep --help").stdout.contains("-i, --ignore-case"), "help lists short forms")
 	var after_short = Sh.Completion.new("grep -i ", session()).get_completions()
 	check(not after_short.has("--ignore-case") and after_short.has("--invert"), "completion hides flags given in short form")
-	equal(out("strip_edges", "  padded  "), "padded", "strip_edges")
 	equal(out("math 2 + 3"), "5", "math")
 	equal(out("xargs echo", "one 'two words'\nthree"), "one two words three", "xargs keeps quoted words")
 	equal(out("echo a | hidden utils count"), "1", "utils route through hidden and their namespace")
+
+
+func _test_str():
+	var children = Sh.Load.load_directory(UTILS.path_join("str"), true)
+	equal(children.size(), Manifest.STR_COMMANDS.size(), "manifest preloads every str subcommand")
+	var ctx = session()
+	check(not Sh.Completion.new("hidden ", ctx).get_completions().has("str"), "str stays under the utils namespace")
+	check(Sh.Completion.new("utils ", ctx).get_completions().has("str"), "utils lists str")
+	var ops = Sh.Completion.new("str ", ctx).get_completions()
+	check(ops.has("basedir") and ops.has("strip_edges") and not ops.has("str_util") and not ops.has("match_base"), "str completes its ops, not its shared scripts")
+	check(not Sh.Completion.new("", ctx).get_completions().has("strip_edges"), "strip_edges moved under str")
+
+	equal(out("str basedir res://a/b.gd"), "res://a", "basedir")
+	equal(out("str file res://a/b.gd"), "b.gd", "file")
+	equal(out("str basename res://a/b.gd"), "res://a/b", "basename")
+	equal(out("str extension res://a/b.gd"), "gd", "extension")
+	equal(out("str join c.gd res://a"), "res://a/c.gd", "join")
+	equal(out("str file", "res://a/x.gd\nres://b/y.tscn\n"), "x.gd\ny.tscn", "ops map stdin lines")
+	equal(run("str extension", "a\nb.gd").stdout, "\ngd\n", "empty results keep lines aligned")
+
+	var paths = "res://a.gd\nuser://b.gd\nres://c.tscn\n"
+	equal(out("str ends_with .gd", paths), "res://a.gd\nuser://b.gd", "ends_with filters stdin")
+	equal(out("str begins_with res:// | str file", paths), "a.gd\nc.tscn", "predicates pipe into ops")
+	equal(run("str ends_with .png", paths).exit_code, 1, "no match fails")
+	var bool_hit = run("str contains -b foo xfoo")
+	check(bool_hit.exit_code == 0 and bool_hit.stdout == "", "--bool prints nothing on a match")
+	equal(run("str contains --bool foo bar").exit_code, 1, "--bool fails without a match")
+	equal(out("str contains -i FOO xfoo"), "xfoo", "--ignore-case")
+	equal(run("str ends_with -bi .GD a.gd").exit_code, 0, "match short flags group")
+	equal(out("if str begins_with -b res:// res://x { echo local } else { echo other }"), "local", "predicates drive if")
+	equal(out('str begins_with "-x" "-xy"'), "-xy", "quoted dash words are literal")
+
+	equal(out("str trim_prefix res:// res://a/b"), "a/b", "trim_prefix")
+	equal(out("str trim_suffix .gd a.gd"), "a", "trim_suffix")
+	equal(out("str replace / . a/b/c"), "a.b.c", "replace")
+	equal(out("str replace -i A x aAa"), "xxx", "replace --ignore-case")
+	equal(out("str upper abc"), "ABC", "upper")
+	equal(out("str lower ABC"), "abc", "lower")
+	equal(out("str slice / 1 a/b/c"), "b", "slice")
+	equal(out("str slice / -1 a/b/c"), "c", "slice negative index")
+	equal(run("str slice / 5 a/b").stdout, "\n", "slice out of range prints an empty line")
+	var bad_index = run("str slice / x a/b")
+	check(bad_index.exit_code != 0 and bad_index.stderr.contains("Index must be an integer"), "slice rejects a non-int index")
+	equal(out("str length hello"), "5", "length")
+	equal(out('str length ""'), "0", "an empty text argument is input")
+	equal(out("str strip_edges", "  padded  "), "padded", "strip_edges")
+	equal(out("str strip_edges", "  a  \n b "), "a\nb", "strip_edges maps lines")
+	equal(run("str strip_edges --left", " a ").stdout, "a \n", "--left keeps trailing whitespace")
+	var no_input = run("str upper")
+	check(no_input.exit_code != 0 and no_input.stderr.contains("No input"), "ops without input fail")
 
 
 func _test_paths():
