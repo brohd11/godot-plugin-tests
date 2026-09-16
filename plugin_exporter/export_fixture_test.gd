@@ -51,6 +51,7 @@ static func run_tests() -> Dictionary:
 		_test_renamed()
 		_test_backport()
 		_test_struct()
+		_test_optimizer()
 		_test_no_cross_contamination()
 		_test_every_reference_resolves()
 
@@ -283,7 +284,7 @@ static func _test_backport() -> void:
 
 
 ## `#! struct`: a tagged data-only class becomes an enum plus create(), and the sites naming it become
-## array literals and Array hints. Not a setting, so every variant has to do it.
+## array literals and Array hints. These fixtures use the enabled optimizer defaults.
 static func _test_struct() -> void:
 	for variant:String in _dirs:
 		var vdir:String = _dirs[variant]
@@ -309,11 +310,11 @@ static func _test_struct() -> void:
 	# Phase 2: field reads index with the enum through each typed route.
 	var access = "src/core/struct_access.gd"
 	_check("struct access: typed param", _has(dir, access,
-		"return v[StructVec.X] * v[StructVec.X] + v[StructVec.Y] * v[StructVec.Y]"), true)
+		"float = v[StructVec.X]"), true)
 	_check("struct access: call return", _has(dir, access, "return StructFixture.make(3)[StructFixture.Pair.LEFT]"), true)
-	_check("struct access: write", _has(dir, access, 'p[StructFixture.Pair.RIGHT] = "changed"'), true)
-	_check("struct access: inferred local", _has(dir, access, "v[StructVec.X] += 1.0"), true)
-	_check("struct access: for var", _has(dir, access, "total += v[StructVec.X]"), true)
+	_check("struct access: write", _has(dir, access, '_right = "changed"'), true)
+	_check("struct access: inferred local", _has(dir, access, "_x += 1.0"), true)
+	_check("struct access: for var", _has(dir, access, "total += _struct_opt_read_"), true)
 	_check("struct access: member and self", _has(dir, access, "return self.held[StructVec.Y] + held[StructVec.X]"), true)
 	_check("struct access: index", _has(dir, access, "return vs[0][StructVec.Y]"), true)
 	_check("struct access: typed array hint", _has(dir, access, "vs: Array[Array]"), true)
@@ -330,6 +331,16 @@ static func _test_struct() -> void:
 	_check("struct blind: read through the injected name", _has(dir, blind, "return StructUser.origin()[StructVec.X]"), true)
 	_check("struct blind: preload injected", _has(dir, blind,
 		'### Plugin Exporter Structs\nconst StructVec = preload("res://addons/plugin_exporter_test/src/core/struct_vec.gd")'), true)
+
+
+static func _test_optimizer() -> void:
+	for variant:String in _dirs:
+		var dir:String = _dirs[variant]
+		var path := "src/core/optimizer_user.gd"
+		_check("%s: scalar locals" % variant, _has(dir, path, "_struct_opt_"), true)
+		_check("%s: expanded inline" % variant, _has(dir, path, "_inline_"), true)
+		_check("%s: direct call removed" % variant, _has(dir, path, "Helpers.affine(number)"), false)
+		_check("%s: struct call removed" % variant, _has(dir, path, "Helpers.struct_score("), false)
 
 
 ## Each variant's setting must reach that variant and no other. The config declares them as untyped
