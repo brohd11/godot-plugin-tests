@@ -4,11 +4,15 @@ const User = preload("user.gd")
 const Blind = preload("blind.gd")
 
 func _init() -> void:
+	var value := User.make_value()
+	var struct_total := User.read_value(value)
+	var expanded := User.expanded_vector(Vector2(2, 3), 2.0)
 	var expected = TYPE_ARRAY if "optimized" in OS.get_cmdline_user_args() else TYPE_OBJECT
-	if User.total() != 15 or Blind.read() != 5 or typeof(User.make()) != expected:
+	if (User.same_file_default() != 3 or struct_total != 14 or value.amount != 7 or User.inline_struct() != 21 or User.total() != 15 or Blind.read() != 5 or typeof(User.make()) != expected
+			or User.inline_total(7) != 50 or User.affine(7, 3) != 25
+			or OptimizerSmokeUser.affine(7, 3) != 25 or expanded != 74.0 or User.expanded_total() != 74.0):
 		printerr("OPTIMIZER_SMOKE_FAILED")
 		quit(1)
 	else:
 		print("OPTIMIZER_SMOKE_OK")
 		quit()
-

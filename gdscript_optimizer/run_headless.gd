@@ -2,7 +2,7 @@ extends SceneTree
 
 func _init() -> void:
 	var failures = 0
-	for name in ["tag_registry", "struct", "optimizer"]:
+	for name in ["tag_registry", "struct", "optimizer", "inline", "expanded_inline", "template_inline", "struct_optimization"]:
 		var suite = load("res://tests/gdscript_optimizer/%s_test.gd" % name)
 		if suite == null or not suite.has_method("run_tests"):
 			failures += 1

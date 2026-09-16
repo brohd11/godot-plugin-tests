@@ -69,7 +69,7 @@ def run(godot, project, *args, expected_error=False):
     return result.stdout
 
 
-def preset(enabled, mode):
+def preset(enabled, mode, inline=False, scalar=False, read_types=0):
     return f'''[preset.0]
 name="Smoke"
 platform="Linux"
@@ -81,6 +81,9 @@ script_export_mode={mode}
 
 [preset.0.options]
 optimization/structs={str(enabled).lower()}
+optimization/inline_functions={str(inline).lower()}
+optimization/scalar_replacement={str(scalar).lower()}
+optimization/struct_read_types={read_types}
 '''
 
 
@@ -120,9 +123,11 @@ renderer/rendering_method="gl_compatibility"
     user.write_text(user.read_text().replace('preload("value.gd")', f'preload("{uid}")'))
     run(args.godot, project, "--editor", "--import")
     before = hashes(project)
-    for enabled, mode in [(True, 0), (True, 1), (True, 2), (False, 2)]:
-        (project / "export_presets.cfg").write_text(preset(enabled, mode))
-        name = f"enabled-{enabled}-mode-{mode}"
+    for enabled, mode, inline in [(True, 0, False), (True, 1, False), (True, 2, False),
+                                  (False, 2, False), (False, 0, True), (True, 0, True),
+                                  (True, 1, True), (True, 2, True)]:
+        (project / "export_presets.cfg").write_text(preset(enabled, mode, inline))
+        name = f"enabled-{enabled}-mode-{mode}-inline-{inline}"
         archive = project.parent / f"{project.name}-{name}.zip"
         run(args.godot, project, "--export-pack", "Smoke", str(archive))
         with zipfile.ZipFile(archive) as package:
@@ -133,9 +138,21 @@ renderer/rendering_method="gl_compatibility"
                 assert "enum { X, Y }" in package.read("point.gd").decode()
                 assert "class_name OptimizerSmokePoint" in package.read("point.gd").decode()
                 assert '### GDScript Optimizer Structs' in package.read("blind.gd").decode()
-                assert ("main.gdc" in files) == (mode != 0), files
+                assert "main.gd" in files, files
             else:
-                assert "point.gdc" in files, files
+                assert ("point.gdc" in files) == (mode != 0), files
+            if inline:
+                rendered = package.read("user.gd").decode()
+                assert "return 2 * affine(value, 3)" not in rendered, rendered
+                assert "return value * scale + value - 3" in rendered, rendered
+                assert "return expanded_vector(Vector2(2, 3), 2.0)" not in rendered, rendered
+                assert "_inline_" in rendered, rendered
+                assert "return step()" not in rendered, rendered
+                assert "var total := read_value(value)" not in rendered, rendered
+                assert "User.read_value(value)" not in package.read("main.gd").decode()
+                assert "User.expanded_vector(Vector2(2, 3), 2.0)" not in package.read("main.gd").decode()
+                assert "User.affine(7, 3)" not in package.read("main.gd").decode()
+                assert "OptimizerSmokeUser.affine(7, 3)" not in package.read("main.gd").decode()
         pack = archive.with_suffix(".pck")
         run(args.godot, project, "--export-pack", "Smoke", str(pack))
         runtime_args = ["--main-pack", str(pack), "--script", "res://main.gd"]
@@ -144,6 +161,28 @@ renderer/rendering_method="gl_compatibility"
         output = run(args.godot, project, *runtime_args)
         assert "OPTIMIZER_SMOKE_OK" in output, output
         assert hashes(project) == before, "Export changed project sources"
+        print(f"PASS {name}", flush=True)
+    for scalar, read_types, inline in [(s, r, i) for s in (False, True)
+                                      for r in range(3) for i in (False, True) if s or r]:
+        (project / "export_presets.cfg").write_text(preset(True, 0, inline, scalar, read_types))
+        name = f"scalar-{scalar}-reads-{read_types}-inline-{inline}"
+        archive = project.parent / f"{project.name}-{name}.zip"
+        output = run(args.godot, project, "--export-pack", "Smoke", str(archive))
+        assert "Exporting original code" not in output, output
+        assert "struct stats=" in output, output
+        with zipfile.ZipFile(archive) as package:
+            rendered = package.read("user.gd").decode()
+            if scalar:
+                assert "_struct_opt_" in rendered and "var pair:" not in rendered, rendered
+            if read_types == 1:
+                assert "_struct_opt_read_" in rendered, rendered
+            if read_types == 2:
+                assert "as int)" in rendered, rendered
+        pack = archive.with_suffix(".pck")
+        run(args.godot, project, "--export-pack", "Smoke", str(pack))
+        output = run(args.godot, project, "--main-pack", str(pack), "--script", "res://main.gd", "--", "optimized")
+        assert "OPTIMIZER_SMOKE_OK" in output, output
+        assert hashes(project) == before
         print(f"PASS {name}", flush=True)
     # Inspect the stored bytes: custom runtime templates are only needed to decrypt the pack.
     for pattern, encrypted in [("*.gd", True), ("*.gdc", False)]:
@@ -161,7 +200,7 @@ script_encryption_key="{'ab' * 32}"
         assert hashes(project) == before, "Encrypted export changed project sources"
     print("PASS PCK encryption filters cover replacement .gd files", flush=True)
     shutil.copy2(FIXTURES / "invalid_struct.gd", project / "invalid.gd")
-    (project / "export_presets.cfg").write_text(preset(True, 0))
+    (project / "export_presets.cfg").write_text(preset(True, 0, True, True, 2))
     failed = project.parent / f"{project.name}-fallback.zip"
     output = run(args.godot, project, "--export-pack", "Smoke", str(failed), expected_error=True)
     assert "Exporting original code; no optimizations were applied" in output, output

@@ -1,6 +1,6 @@
 extends RefCounted
 ## Editor Console runtime checks, driven by runtime_test.gd (headless and editor console `test`).
-const Sh = preload("res://addons/addon_lib/gdsh/gdsh.gd")
+const Sh = preload("res://addons/addon_lib/gdsh/_ns/gdsh.gd")
 const Adapter = preload("res://addons/editor_console/src/utils/os_adapter.gd")
 var checks:int = 0
 var failures:int = 0

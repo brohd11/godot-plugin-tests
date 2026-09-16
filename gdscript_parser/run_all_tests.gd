@@ -12,6 +12,7 @@ extends EditorScript
 ## `out`, returns its fail count), so each is executed exactly once here.
 
 const SUITES := [
+	{"name": "Source Provider", "script": "res://tests/gdscript_parser/source_provider_test.gd"},
 	{"name": "Access Path",              "script": "res://tests/gdscript_parser/access_path_test.gd"},
 	{"name": "Inference",                "script": "res://tests/gdscript_parser/inference_test.gd"},
 	{"name": "Cross-Script Cache",       "script": "res://tests/gdscript_parser/cross_script_cache_test.gd"},
