@@ -22,7 +22,12 @@ const ENTRY_FIELDS := [Keys.MEMBER_TYPE, Keys.MEMBER_NAME, Keys.LINE_INDEX, Keys
 	Keys.HAS_STATIC_TYPE, Keys.ASSIGNMENT, Keys.ACCESS_PATH, Keys.SCRIPT_PATH]
 
 
-func _init() -> void:
+# _initialize(), not _init(): the main loop is null during _init(), so the native backend cannot attach.
+func _initialize() -> void:
+	_run_headless.call_deferred()
+
+
+func _run_headless() -> void:
 	var res := run_tests()
 	print("\n".join(res.output))
 	quit(1 if res.result > 0 else 0)

@@ -4,7 +4,12 @@ const Parser = preload("res://addons/addon_lib/gdscript_parser/gdscript_parser.g
 const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const SOURCE = "extends RefCounted\nvar callbacks = [func(a: int): return a, func(b: String): return b]\nfunc run(captured: Color):\n\tvar before: int = 1\n\t[1].map(func(value: int):\n\t\tvar own: String = str(value)\n\t\t[2].map(func(inner: int): return inner + before)\n\t\treturn own\n\t)\n\tvar assigned = func(arg: int): return arg\n\tvar after: int = 2\n"
 
-func _init() -> void:
+# _initialize(), not _init(): the main loop is null during _init(), so the native backend cannot attach.
+func _initialize() -> void:
+	_run_headless.call_deferred()
+
+
+func _run_headless() -> void:
 	var result:Dictionary = run_tests()
 	print("\n".join(result.output))
 	quit(1 if result.result else 0)

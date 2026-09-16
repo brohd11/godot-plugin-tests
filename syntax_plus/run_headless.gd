@@ -10,7 +10,13 @@ const SUITES:PackedStringArray = [
 	"res://tests/syntax_plus/line_data_test.gd",
 ]
 
-func _init() -> void:
+## _initialize(), not _init(): the main loop is null during _init(), so the native backend cannot
+## attach and the native-mode check would skip. See tests/gdscript_parser/run_all_headless.gd.
+func _initialize() -> void:
+	_run_suites.call_deferred()
+
+
+func _run_suites() -> void:
 	var success = true
 	var output:Array[String] = []
 
