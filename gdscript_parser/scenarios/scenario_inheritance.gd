@@ -6,7 +6,7 @@ extends GpDerived
 
 @warning_ignore_start("unassigned_variable", "unused_variable", "standalone_expression", "unused_parameter", "unreachable_code", "confusable_local_declaration")
 
-const Widgets = preload("res://tests/brohd/gdscript_parser/fixtures/gp_widgets.gd")
+const Widgets = preload("res://tests/gdscript_parser/fixtures/gp_widgets.gd")
 
 func _s_inherited_enum() -> void:
 	var st := make_state()                                    # inherited method -> State

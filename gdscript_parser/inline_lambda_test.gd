@@ -1,6 +1,6 @@
 extends SceneTree
 
-const Parser = preload("res://addons/addon_lib/brohd/alib_runtime/utils/gdscript/parser/gdscript_parser.gd")
+const Parser = preload("res://addons/addon_lib/gdscript_parser/gdscript_parser.gd")
 const SOURCE = "extends RefCounted\nvar callbacks = [func(a: int): return a, func(b: String): return b]\nfunc run(captured: Color):\n\tvar before: int = 1\n\t[1].map(func(value: int):\n\t\tvar own: String = str(value)\n\t\t[2].map(func(inner: int): return inner + before)\n\t\treturn own\n\t)\n\tvar assigned = func(arg: int): return arg\n\tvar after: int = 2\n"
 
 func _init() -> void:
@@ -31,7 +31,7 @@ static func _run(out:Array) -> int:
 		parser.set_parser_cache({})
 		parser.set_use_tree_sitter(use_ts)
 		parser.active_parser = parser
-		parser.set_current_script(load("res://tests/brohd/gdscript_parser/fixtures/gp_lambda_scope.gd"))
+		parser.set_current_script(load("res://tests/gdscript_parser/fixtures/gp_lambda_scope.gd"))
 		parser.set_source_code(SOURCE)
 		parser.parse(true)
 		var root = parser.get_class_object("")

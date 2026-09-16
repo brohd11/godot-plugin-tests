@@ -1,5 +1,5 @@
 @tool
-extends "res://tests/brohd/gdscript_parser/scenarios/scenario_anon_base.gd"
+extends "res://tests/gdscript_parser/scenarios/scenario_anon_base.gd"
 ## Caller half of the new_ins repro (mirrors new_ins.gd): the object arrives from an INHERITED
 ## method, and the only reach to its script is an INHERITED preload const - so the caller's own
 ## scope holds nothing that names the type. The assigned var's type is a bare inner class, which

@@ -6,9 +6,9 @@ extends RefCounted
 
 @warning_ignore_start("unassigned_variable", "unused_variable", "standalone_expression", "unused_parameter", "unreachable_code", "confusable_local_declaration")
 
-const Service = preload("res://tests/brohd/gdscript_parser/fixtures/gp_service.gd")
+const Service = preload("res://tests/gdscript_parser/fixtures/gp_service.gd")
 const Sc = GpService.Ticker.Scale  # caller-side alias for the nested enum
-const Anon = preload("res://tests/brohd/gdscript_parser/fixtures/gp_anon.gd")  # no class_name -> alias is the ONLY reach
+const Anon = preload("res://tests/gdscript_parser/fixtures/gp_anon.gd")  # no class_name -> alias is the ONLY reach
 
 func _s_call_full() -> void:
 	var s := Service.new()

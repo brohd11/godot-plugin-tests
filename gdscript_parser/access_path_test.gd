@@ -7,16 +7,16 @@ extends RefCounted
 ## caret-context -> access.gd path, and asserts the resolved standard / script_alias / global.
 ##
 ## Run it (returns {result: fail count, output: report lines}):
-##     load("res://tests/brohd/gdscript_parser/access_path_test.gd").run_tests()
+##     load("res://tests/gdscript_parser/access_path_test.gd").run_tests()
 ##
 ## IMPORTANT: a *running* editor caches the parser scripts (access.gd et al.) via preloaded
 ## consts, so edits to them are NOT reliably hot-reloaded - restart the editor first, or use the
 ## clean-compile headless runner:
-##     godot --headless --path . --script res://tests/brohd/gdscript_parser/run_headless.gd
+##     godot --headless --path . --script res://tests/gdscript_parser/run_headless.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 
-const DIR := "res://tests/brohd/gdscript_parser/"
+const DIR := "res://tests/gdscript_parser/"
 const BASIC := DIR + "scenarios/scenario_basic.gd"
 const INHERIT := DIR + "scenarios/scenario_inheritance.gd"
 const ALIASES := DIR + "scenarios/scenario_aliases.gd"

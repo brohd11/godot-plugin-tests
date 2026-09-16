@@ -8,7 +8,7 @@ extends EditorScript
 
 const StructRewrite = preload("res://addons/plugin_exporter/src/class/export/parse/gd/struct/struct_rewrite.gd")
 const StructTypes = preload("res://addons/plugin_exporter/src/class/export/parse/gd/struct/struct_types.gd")
-const GDScriptParser = preload("res://addons/addon_lib/brohd/alib_runtime/utils/gdscript/parser/gdscript_parser.gd")
+const GDScriptParser = preload("res://addons/addon_lib/gdscript_parser/gdscript_parser.gd")
 const P = "res://s.gd"
 
 const VEC = "res://addons/plugin_exporter_test/src/core/struct_vec.gd"

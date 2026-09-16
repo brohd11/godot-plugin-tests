@@ -11,18 +11,18 @@ extends RefCounted
 ## green. Everything downstream keys off one thing - the type ending in "##Enum" - because
 ## enum_completion._process_identifier() bails immediately without it. So that is what is asserted.
 ##
-##     load("res://tests/brohd/gdscript_parser/global_enum_test.gd").run_tests()
+##     load("res://tests/gdscript_parser/global_enum_test.gd").run_tests()
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const Keys = GDScriptParser.Keys
 
-const SCENARIO := "res://tests/brohd/gdscript_parser/scenarios/scenario_global_enum.gd"
+const SCENARIO := "res://tests/gdscript_parser/scenarios/scenario_global_enum.gd"
 
 const ENUM_SUFFIX := Keys.ENUM_PATH_SUFFIX
 const GLOBAL_ERR := "Error" + ENUM_SUFFIX
 const GLOBAL_KEY := "Key" + ENUM_SUFFIX
 const CLASS_PM := "Node::ProcessMode" + ENUM_SUFFIX
-const SCRIPT_STATE := "res://tests/brohd/gdscript_parser/fixtures/gp_base.gd::State" + ENUM_SUFFIX
+const SCRIPT_STATE := "res://tests/gdscript_parser/fixtures/gp_base.gd::State" + ENUM_SUFFIX
 
 
 ## `kind` is where the caret sits: an operand (`op`), a call argument (`arg`), or a match branch

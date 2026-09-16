@@ -7,7 +7,7 @@ extends RefCounted
 ## call as its arg (1 arg) or "Array" (2+ args) - e.g. Control.add_theme_color_override -> "Array".
 ## The fix gates that branch on member_type == signals; void methods now fall through to "void".
 ##
-##     load("res://tests/brohd/gdscript_parser/builtin_return_test.gd").run_tests()
+##     load("res://tests/gdscript_parser/builtin_return_test.gd").run_tests()
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const BuiltInChecker = GDScriptParser.BuiltInChecker

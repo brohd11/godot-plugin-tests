@@ -9,15 +9,15 @@ extends RefCounted
 ## CLASS_BODY for the line just typed and its local is unresolvable, which is exactly when completion
 ## asks. sync_line_ranges() closes the window WITHOUT touching members, types or resolve caches.
 ##
-##     load("res://tests/brohd/gdscript_parser/live_edit_lines_test.gd").run_tests()
+##     load("res://tests/gdscript_parser/live_edit_lines_test.gd").run_tests()
 ##
 ## IMPORTANT: a *running* editor caches the parser scripts via preloaded consts, so edits to them are
 ## NOT reliably hot-reloaded - use the clean-compile headless runner:
-##     Godot --headless --path . --script res://tests/brohd/gdscript_parser/run_all_headless.gd
+##     Godot --headless --path . --script res://tests/gdscript_parser/run_all_headless.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 
-const DIR := "res://tests/brohd/gdscript_parser/"
+const DIR := "res://tests/gdscript_parser/"
 const SCENARIO := DIR + "scenarios/scenario_live_edit.gd"
 
 ## The statement typed under the trailing comment of _click(), and a whole function typed from

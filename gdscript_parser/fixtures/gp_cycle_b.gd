@@ -1,11 +1,11 @@
 @tool
-extends "res://tests/brohd/gdscript_parser/fixtures/gp_cycle_a.gd" #! ext ACycle
+extends "res://tests/gdscript_parser/fixtures/gp_cycle_a.gd" #! ext ACycle
 ## Fixture: other half of the mutual-preload cycle. `extends ACycle` names a preload const declared
 ## BELOW the extends line, PATH forward-references P, and InnerB extends the preload const.
 
 @warning_ignore_start("unused_variable")
 
-const ACycle = preload("res://tests/brohd/gdscript_parser/fixtures/gp_cycle_a.gd")
+const ACycle = preload("res://tests/gdscript_parser/fixtures/gp_cycle_a.gd")
 
 const PATH = P
 const P = "gp_cycle_b.gd"

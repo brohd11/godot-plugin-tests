@@ -13,12 +13,12 @@ extends SceneTree
 ## The invariant, then: the path reconstructed from the symbol data must equal the declaring member
 ## path that origin already states.
 ##
-##     Godot --headless --path . --script res://tests/brohd/gdscript_parser/declaring_script_test.gd
+##     Godot --headless --path . --script res://tests/gdscript_parser/declaring_script_test.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const Utils = GDScriptParser.Utils
 
-const DIR := "res://tests/brohd/gdscript_parser/"
+const DIR := "res://tests/gdscript_parser/"
 const COLLISION := DIR + "scenarios/scenario_collision.gd"
 const KIT_BASE := DIR + "fixtures/gp_kit_base.gd"
 

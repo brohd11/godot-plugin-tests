@@ -3,11 +3,11 @@ extends SceneTree
 ## resolve-cache hits with NO source loaded, lazily attach source only on a miss, be returned by
 ## get_parser_for_path's disk fallback without a re-parse, and upgrade to live when the file changes.
 ##
-##     Godot_mono_463 --headless --path . --script res://tests/brohd/gdscript_parser/cross_script_cache_test.gd
+##     Godot_mono_463 --headless --path . --script res://tests/gdscript_parser/cross_script_cache_test.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 
-const DIR := "res://tests/brohd/gdscript_parser/"
+const DIR := "res://tests/gdscript_parser/"
 const TEST_CACHE_DIR := "res://.godot/addons/gdscript_parser/parse_cache_test"
 const POISON := "__POISONED_CACHE_ENTRY__" # sentinel for _test_live_resolve_stays_live
 const FIXTURES := [

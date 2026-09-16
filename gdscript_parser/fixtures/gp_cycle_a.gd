@@ -6,7 +6,7 @@ extends RefCounted
 
 @warning_ignore_start("unused_variable")
 
-const BCycle = preload("res://tests/brohd/gdscript_parser/fixtures/gp_cycle_b.gd")
+const BCycle = preload("res://tests/gdscript_parser/fixtures/gp_cycle_b.gd")
 
 enum Phase { IDLE, RUN }
 

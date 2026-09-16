@@ -93,7 +93,7 @@ func infer_cases() -> void:
 		pass
 
 	# preload(...).CONST
-	var preload_const = preload("res://tests/brohd/gdscript_parser/fixtures/inf_enum.gd").MY_COLOR
+	var preload_const = preload("res://tests/gdscript_parser/fixtures/inf_enum.gd").MY_COLOR
 
 	# `as` cast
 	var cast_obj = Object.new() as InfEnum

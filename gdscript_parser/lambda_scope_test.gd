@@ -2,12 +2,12 @@ extends SceneTree
 ## Scope inside var-assigned lambdas. Resolution must see the whole stack: a lambda's args and locals
 ## shadow the same names in outer lambdas and the function, and fall out of scope where it ends.
 ##
-##     Godot --headless --path . --script res://tests/brohd/gdscript_parser/lambda_scope_test.gd
+##     Godot --headless --path . --script res://tests/gdscript_parser/lambda_scope_test.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const Keys = GDScriptParser.Keys
 
-const FIXTURE := "res://tests/brohd/gdscript_parser/fixtures/gp_lambda_scope.gd"
+const FIXTURE := "res://tests/gdscript_parser/fixtures/gp_lambda_scope.gd"
 
 # local var -> expected resolved type
 const CASES := {

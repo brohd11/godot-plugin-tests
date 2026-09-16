@@ -6,11 +6,11 @@ extends SceneTree
 ## re-emitted cache dict is byte-for-byte identical - proving no data is lost and no live object
 ## leaks into the plain-data file (store_var full_objects=false would otherwise error).
 ##
-##     Godot --headless --path . --script res://tests/brohd/gdscript_parser/serialization_roundtrip_test.gd
+##     Godot --headless --path . --script res://tests/gdscript_parser/serialization_roundtrip_test.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 
-const DIR := "res://tests/brohd/gdscript_parser/"
+const DIR := "res://tests/gdscript_parser/"
 const TEST_CACHE_DIR := "res://.godot/addons/gdscript_parser/parse_cache_test"
 const FIXTURES := [
 	DIR + "scenarios/scenario_inheritance.gd",

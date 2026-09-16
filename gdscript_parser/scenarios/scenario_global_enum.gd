@@ -1,5 +1,5 @@
 @tool
-extends "res://tests/brohd/gdscript_parser/fixtures/gp_enum_base.gd"
+extends "res://tests/gdscript_parser/fixtures/gp_enum_base.gd"
 ## Enum typing across every kind of enum and every way a value acquires one.
 ##
 ## THE KINDS (three separate resolution paths, and they do NOT share code):
@@ -14,7 +14,7 @@ extends "res://tests/brohd/gdscript_parser/fixtures/gp_enum_base.gd"
 ## Everything downstream keys off the type ending in "##Enum" - enum_completion._process_identifier()
 ## bails immediately without it.
 
-const GpBase = preload("res://tests/brohd/gdscript_parser/fixtures/gp_base.gd")
+const GpBase = preload("res://tests/gdscript_parser/fixtures/gp_base.gd")
 
 @warning_ignore_start("unused_variable", "standalone_expression", "unused_parameter", "unassigned_variable")
 

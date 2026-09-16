@@ -12,15 +12,15 @@ extends RefCounted
 ## every inner-class line resolved to the root, and any cross-script resolve that anchors on
 ## ParserClass.declaration_line (_process_external_identifier -> ClassData) silently returned "".
 ##
-##     load("res://tests/brohd/gdscript_parser/class_at_line_test.gd").run_tests()
+##     load("res://tests/gdscript_parser/class_at_line_test.gd").run_tests()
 ##
 ## IMPORTANT: a *running* editor caches the parser scripts via preloaded consts, so edits to them are
 ## NOT reliably hot-reloaded - use the clean-compile headless runner:
-##     Godot --headless --path . --script res://tests/brohd/gdscript_parser/run_all_headless.gd
+##     Godot --headless --path . --script res://tests/gdscript_parser/run_all_headless.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 
-const DIR := "res://tests/brohd/gdscript_parser/"
+const DIR := "res://tests/gdscript_parser/"
 const BASIC := DIR + "scenarios/scenario_basic.gd"
 
 

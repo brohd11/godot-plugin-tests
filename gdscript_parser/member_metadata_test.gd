@@ -10,13 +10,13 @@ extends SceneTree
 ##
 ## So: assert the values are RIGHT, in both parse modes, live and rehydrated.
 ##
-##     Godot --headless --path . --script res://tests/brohd/gdscript_parser/member_metadata_test.gd
+##     Godot --headless --path . --script res://tests/gdscript_parser/member_metadata_test.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const Keys = GDScriptParser.Keys
 const UString = GDScriptParser.UString
 
-const DIR := "res://tests/brohd/gdscript_parser/"
+const DIR := "res://tests/gdscript_parser/"
 const TEST_CACHE_DIR := "res://.godot/addons/gdscript_parser/parse_cache_meta_test"
 const FIXTURES := [
 	DIR + "fixtures/gp_base.gd",     # enum + const alias + inner class

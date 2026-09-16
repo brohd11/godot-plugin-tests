@@ -3,12 +3,12 @@ extends SceneTree
 ## entries must resolve to int without the check_member_line reparse fallback, and lambdas must
 ## survive the disk cache.
 ##
-##     Godot --headless --path . --script res://tests/brohd/gdscript_parser/nameless_enum_lambda_test.gd
+##     Godot --headless --path . --script res://tests/gdscript_parser/nameless_enum_lambda_test.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const Keys = GDScriptParser.Keys
 
-const FIXTURE := "res://tests/brohd/gdscript_parser/fixtures/gp_enum_lambda.gd"
+const FIXTURE := "res://tests/gdscript_parser/fixtures/gp_enum_lambda.gd"
 const TEST_CACHE_DIR := "res://.godot/addons/gdscript_parser/parse_cache_enum_lambda_test"
 
 # entry name -> [line, column, assignment]

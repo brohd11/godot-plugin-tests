@@ -7,17 +7,17 @@ extends RefCounted
 ## mangled `name-line-col` key (parser_func.gd stores every local that way) and resolves it.
 ##
 ## Run it (returns {result: fail count, output: report lines}):
-##     load("res://tests/brohd/gdscript_parser/inference_test.gd").run_tests()
-##     load("res://tests/brohd/gdscript_parser/inference_test.gd").probe_all()   # dump every local's type
+##     load("res://tests/gdscript_parser/inference_test.gd").run_tests()
+##     load("res://tests/gdscript_parser/inference_test.gd").probe_all()   # dump every local's type
 ##
 ## IMPORTANT: a *running* editor caches the parser scripts via preloaded consts, so edits to them are
 ## NOT reliably hot-reloaded - use the clean-compile headless runner:
-##     Godot --headless --path . --script res://tests/brohd/gdscript_parser/run_inference_headless.gd
+##     Godot --headless --path . --script res://tests/gdscript_parser/run_inference_headless.gd
 
 const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const Keys = GDScriptParser.Keys
 
-const DIR := "res://tests/brohd/gdscript_parser/"
+const DIR := "res://tests/gdscript_parser/"
 const SCENARIO := DIR + "scenarios/scenario_inference.gd"
 const FUNC := "infer_cases"
 
@@ -37,7 +37,7 @@ static func _cases() -> Array:
 		# --- explicit type + iteration typing ---
 		# declared `int`, but assigned InfSupport.INT_2: type stops at the hint, origin chases the const.
 		{"name": "explicit_int", "expected": "int",
-			"origin": "res://tests/brohd/gdscript_parser/fixtures/inf_support.gd::INT_2##int"},
+			"origin": "res://tests/gdscript_parser/fixtures/inf_support.gd::INT_2##int"},
 		{"name": "dict_key", "expected": "String"},              # typed-dict key type
 		{"name": "dict_value", "expected": "int"},               # typed-dict values() element
 		# --- builtin value + index typing ---
@@ -50,9 +50,9 @@ static func _cases() -> Array:
 		{"name": "lambda_ref", "expected": "Callable"},
 		# same declaring member, two different types: origin is the signal, type is its arg / Signal.
 		{"name": "awaited_signal_arg", "expected": "int",        # await signal -> arg type
-			"origin": "res://tests/brohd/gdscript_parser/scenarios/scenario_inference.gd::local_signal##int"},
+			"origin": "res://tests/gdscript_parser/scenarios/scenario_inference.gd::local_signal##int"},
 		{"name": "signal_ref", "expected": "Signal",
-			"origin": "res://tests/brohd/gdscript_parser/scenarios/scenario_inference.gd::local_signal##Signal"},
+			"origin": "res://tests/gdscript_parser/scenarios/scenario_inference.gd::local_signal##Signal"},
 		{"name": "awaited_ref", "expected": "int"},              # await a Signal-valued local
 		# --- builtin func as Callable + its .call() return ---
 		{"name": "builtin_callable", "expected": "Callable",     # `char`
@@ -62,27 +62,27 @@ static func _cases() -> Array:
 		# --- cross-func callable/signal chains ---
 		# origin chases through the returning func to the func that was returned as a value.
 		{"name": "returned_callable", "expected": "Callable",
-			"origin": "res://tests/brohd/gdscript_parser/scenarios/scenario_inference.gd::funk_test##Callable"},
+			"origin": "res://tests/gdscript_parser/scenarios/scenario_inference.gd::funk_test##Callable"},
 		# two hops: get_call() -> funk_test() -> `code.text_changed` on a LineEdit local.
 		{"name": "called_signal", "expected": "Signal",
 			"origin": "LineEdit::text_changed##Signal"},         # engine class member, not a res:// path
 		{"name": "awaited_return", "expected": "String"},
 		{"name": "returned_callable2", "expected": "Callable",
-			"origin": "res://tests/brohd/gdscript_parser/scenarios/scenario_inference.gd::another_sig##Callable"},
+			"origin": "res://tests/gdscript_parser/scenarios/scenario_inference.gd::another_sig##Callable"},
 		{"name": "called_signal2", "expected": "Signal",         # another_sig() -> InfSupport.new().sig_bool
-			"origin": "res://tests/brohd/gdscript_parser/fixtures/inf_support.gd::sig_bool##Signal"},
+			"origin": "res://tests/gdscript_parser/fixtures/inf_support.gd::sig_bool##Signal"},
 		{"name": "awaited_bool", "expected": "bool",             # same member, awaited -> the arg type
-			"origin": "res://tests/brohd/gdscript_parser/fixtures/inf_support.gd::sig_bool##bool"},
+			"origin": "res://tests/gdscript_parser/fixtures/inf_support.gd::sig_bool##bool"},
 		{"name": "sig_connections", "expected": "Array"},        # Signal.get_connections()
 		{"name": "typed_conns", "expected": "Array[String]"},
 		# --- constructor instances + method returns + subscript-new ---
-		{"name": "made_obj", "expected": "res://tests/brohd/gdscript_parser/fixtures/inf_support.gd$$INS",
-			"origin": "res://tests/brohd/gdscript_parser/fixtures/inf_support.gd$$INS"}, # instance: no member tail
+		{"name": "made_obj", "expected": "res://tests/gdscript_parser/fixtures/inf_support.gd$$INS",
+			"origin": "res://tests/gdscript_parser/fixtures/inf_support.gd$$INS"}, # instance: no member tail
 		{"name": "obj_string", "expected": "String",
-			"origin": "res://tests/brohd/gdscript_parser/fixtures/inf_support.gd::get_string##String"},
+			"origin": "res://tests/gdscript_parser/fixtures/inf_support.gd::get_string##String"},
 		{"name": "static_string", "expected": "String",
-			"origin": "res://tests/brohd/gdscript_parser/fixtures/inf_support.gd::static_get_string##String"},
-		{"name": "subscript_new", "expected": "res://tests/brohd/gdscript_parser/fixtures/inf_support.gd$$INS"},
+			"origin": "res://tests/gdscript_parser/fixtures/inf_support.gd::static_get_string##String"},
+		{"name": "subscript_new", "expected": "res://tests/gdscript_parser/fixtures/inf_support.gd$$INS"},
 		{"name": "subscript_string", "expected": "String"},
 		{"name": "made_signal", "expected": "Signal"},           # untyped func returning a signal
 		{"name": "awaited_made", "expected": "bool"},
@@ -96,18 +96,18 @@ static func _cases() -> Array:
 		# declared hint + `= {}`: origin keeps the hint rather than the empty literal (type_lookup.gd:902).
 		{"name": "typed_map", "expected": "Dictionary[InfEnum, InfEnum.Nested]",
 			"origin": "Dictionary[InfEnum, InfEnum.Nested]"},
-		{"name": "map_key", "expected": "res://tests/brohd/gdscript_parser/fixtures/inf_enum.gd$$INS"},
-		{"name": "map_val", "expected": "res://tests/brohd/gdscript_parser/fixtures/inf_enum.gd.Nested$$INS",
-			"origin": "res://tests/brohd/gdscript_parser/fixtures/inf_enum.gd.Nested$$INS"}, # inner class instance
+		{"name": "map_key", "expected": "res://tests/gdscript_parser/fixtures/inf_enum.gd$$INS"},
+		{"name": "map_val", "expected": "res://tests/gdscript_parser/fixtures/inf_enum.gd.Nested$$INS",
+			"origin": "res://tests/gdscript_parser/fixtures/inf_enum.gd.Nested$$INS"}, # inner class instance
 		# --- packed array element / preload const / as-cast ---
 		{"name": "packed", "expected": "PackedByteArray"},
 		{"name": "byte", "expected": "int"},
 		{"name": "preload_const", "expected": "Color",           # preload(...).MY_COLOR
-			"origin": "res://tests/brohd/gdscript_parser/fixtures/inf_enum.gd::MY_COLOR##Color"},
-		{"name": "cast_obj", "expected": "res://tests/brohd/gdscript_parser/fixtures/inf_enum.gd$$INS"},
+			"origin": "res://tests/gdscript_parser/fixtures/inf_enum.gd::MY_COLOR##Color"},
+		{"name": "cast_obj", "expected": "res://tests/gdscript_parser/fixtures/inf_enum.gd$$INS"},
 		# --- nested static enum-returning func (Callable + enum return) ---
 		{"name": "nested_callable", "expected": "Callable",      # inner-class member path + ##Callable
-			"origin": "res://tests/brohd/gdscript_parser/fixtures/inf_support.gd.Nested::node_test##Callable"},
+			"origin": "res://tests/gdscript_parser/fixtures/inf_support.gd.Nested::node_test##Callable"},
 		{"name": "nested_call_ret", "expected": "Node::ProcessMode##Enum",
 			"origin": "Node::ProcessMode##Enum"},                # ##Enum shape
 		{"name": "nested_direct", "expected": "Node::ProcessMode##Enum"},
@@ -116,7 +116,7 @@ static func _cases() -> Array:
 		{"name": "node_static", "expected": "Node", "origin": "Node"},
 		# --- member-shadowing local ---
 		{"name": "pre_shadow_callable", "expected": "Callable",  # before shadow: the func
-			"origin": "res://tests/brohd/gdscript_parser/scenarios/scenario_inference.gd::shadowed_func##Callable"},
+			"origin": "res://tests/gdscript_parser/scenarios/scenario_inference.gd::shadowed_func##Callable"},
 		{"name": "shadowed_func", "expected": "String"},         # the shadowing local
 		{"name": "post_shadow", "expected": "String"},           # ref after shadow -> the local
 		# --- terminal local directly followed by a func decl (end-of-function boundary) ---
