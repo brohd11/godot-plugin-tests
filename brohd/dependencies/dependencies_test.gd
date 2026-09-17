@@ -46,6 +46,7 @@ static func run_tests() -> Dictionary:
 	_test_serialized_files()
 	_test_tres_script_class()
 	_test_tags()
+	_test_ignore_line_tags()
 	_test_max_depth()
 	_test_ignores_and_stop_at()
 	_test_leaf_and_missing()
@@ -73,6 +74,58 @@ func _run() -> void: # EditorScript entry, for running this from the editor
 
 
 # --- cases -------------------------------------------------------------------------------
+
+static func _test_ignore_line_tags() -> void:
+	var leaf = _w("ignore_leaf.gd", "extends RefCounted\n")
+	var child = _w("ignore_child.gd", 'const Leaf = preload("%s")\n' % leaf)
+	var ignored = _w("ignore_root.gd", 'const Child = preload("%s") #! skip-ref\n' % child)
+	var scanner = Dependencies.open(ignored)
+	scanner.use_project_classes = false
+	_check("ignore: inert by default", scanner.get_graph().has(leaf), true)
+	scanner.ignore_line_tags = ["skip-ref"]
+	_check("ignore: suppresses edge and descendants", scanner.get_graph().nodes.size(), 1)
+
+	for code in [
+		'const Child = preload("%s") #! skip-ref',
+		'extends "%s" #! skip-ref',
+		'var child = load("%s") #! skip-ref',
+	]:
+		scanner.roots = [_w("ignore_shapes.gd", code % child + "\n")]
+		_check("ignore: reference kind " + code, scanner.get_graph().has(child), false)
+
+	for suffix in [" #! skip-reference", ' # prose mentions #! skip-ref', ' # "quoted #! skip-ref"']:
+		scanner.roots = [_w("ignore_prose.gd", 'const Child = preload("%s")%s\n' % [child, suffix])]
+		_check("ignore: exact comment tag " + suffix, scanner.get_graph().has(child), true)
+	scanner.roots = [_w("ignore_header.gd", '#! skip-ref\nconst Child = preload("%s")\n' % child)]
+	_check("ignore: header has no file scope", scanner.get_graph().has(leaf), true)
+
+	scanner.class_map = {"Child": child}
+	for code in [
+		"var ignored = Child #! skip-ref\nvar included = Child\n",
+		"var included = Child\nvar ignored = Child #! skip-ref\n",
+		"extends Child #! skip-ref\nvar included = Child\n",
+		"var ignored = Child.Leaf #! skip-ref\nvar included = Child.Leaf\n",
+	]:
+		scanner.roots = [_w("ignore_repeat.gd", code)]
+		var graph = scanner.get_graph()
+		_check("ignore: later/earlier use still gathers " + code, graph.has(leaf), true)
+		for edge in graph.get_out_edges(scanner.roots[0]):
+			var line:String = code.split("\n")[edge.line_no - 1]
+			_check("ignore: no ignored occurrence emitted", line.contains("#! skip-ref"), false)
+
+	scanner.roots = [_w("ignore_class.gd", "var child = Child.Leaf #! skip-ref\n")]
+	_check("ignore: class and access path suppressed", scanner.get_graph().nodes.size(), 1)
+	scanner.roots = [_w("ignore_declared.gd", "class_name Child #! skip-ref\nvar child: Child\n")]
+	_check("ignore: declaration is still local", scanner.get_graph().nodes.size(), 1)
+
+	var text = "var text = \"\"\"\n#! skip-ref\n\"\"\"\nvar real = Child #! skip-ref\n"
+	_check("ignore: multiline string is not a tag",
+		Dependencies.ScanGD.ignored_line_numbers(text, ["skip-ref"]), {3: true})
+	_check("ignore: masking preserves positions",
+		Dependencies.ScanGD.mask_ignored_lines(text, ["skip-ref"]).length(), text.length())
+	_check("ignore: quoted tag is not a comment",
+		Dependencies.ScanGD.ignored_line_numbers('var text = "#! skip-ref"', ["skip-ref"]), {})
+
 
 static func _test_linear_chain() -> void:
 	var c = _w("chain_c.gd", "extends RefCounted\n")

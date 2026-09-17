@@ -3,8 +3,13 @@ extends SceneTree
 const User = preload("user.gd")
 const Blind = preload("blind.gd")
 const References = preload("references.gd")
+const Inline = preload("inline.gd")
 
 func _init() -> void:
+	if Inline.early_check() != [5, ["early", "after", 0, "after", 1, "after"]]:
+		printerr("EARLY_RETURN_SMOKE_FAILED")
+		quit(1)
+		return
 	for path:String in ["test.gd", "test.gd.remap", "test.gd::Inner", "image.png"]:
 		if User.path_check(path) != (path != "image.png"):
 			printerr("PREDICATE_SMOKE_FAILED")

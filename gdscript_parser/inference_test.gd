@@ -271,7 +271,7 @@ static func _check_origin_resolves(parser: GDScriptParser, origin: String) -> St
 
 ## Mirror the editor: build the global-class registry from ProjectSettings (absent headless signal).
 static func _ensure_global_class_registry() -> void:
-	var ucd = GDScriptParser.UClassDetail
+	var ucd = GDScriptParser.URClassDetail
 	if ucd.global_class_registry.is_empty():
 		ucd.global_class_registry = ucd.get_all_global_class_paths()
 

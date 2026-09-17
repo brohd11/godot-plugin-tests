@@ -176,6 +176,10 @@ static func _test_rewrites() -> void:
 	for variant in _dirs:
 		_check("%s: malformed absolute path normalized" % variant,
 			_has(_dirs[variant], "src/utils_remote.gd", "addon_lib/brohd//"), false)
+		_check("%s: untagged hub dependency copied" % variant,
+			_found(_dirs[variant], "/u_list.gd"), true)
+		_check("%s: preload hub needs no remote tag" % variant,
+			_has(_dirs[variant], "src/utils_remote.gd", "#! remote"), false)
 	_check("ignore-remote path untouched", _has(dir, "src/core/consumer.gd",
 		'"res://addons/addon_lib/brohd/README.md" #! ignore-remote'), true)
 	_check("namespace directive stripped", _has(dir, "src/core/tags.gd", "#! namespace"), false)
@@ -391,6 +395,8 @@ static func _test_every_reference_resolves() -> void:
 			if not ext in ["gd", "tscn", "tres"]:
 				continue
 			var text = FileAccess.get_file_as_string(file)
+			if ext == "gd":
+				text = ExportFileUtils.ScanGD.mask_ignored_lines(text, ["ignore-remote"])
 			var regex = preload_regex if ext == "gd" else ext_resource_regex
 			for m in regex.search_all(text):
 				var target:String = m.get_string(1)

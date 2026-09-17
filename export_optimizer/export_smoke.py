@@ -203,6 +203,10 @@ renderer/rendering_method="gl_compatibility"
             else:
                 assert ("point.gdc" in files) == (mode != 0), files
             if inline:
+                early_source = package.read("inline.gd").decode()
+                assert "var result := early_value(value)" in early_source, early_source
+                assert "early_effect(events, value)" not in early_source, early_source
+                assert 'control_flow="single_iteration"' in early_source, early_source
                 rendered = package.read("user.gd").decode()
                 assert "return 2 * affine(value, 3)" not in rendered, rendered
                 assert "if is_gdscript_path(path):" not in rendered, rendered

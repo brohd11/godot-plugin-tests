@@ -29,7 +29,7 @@ static func _run(out:Array) -> int:
 	# Only _range_parity needs a backend; everything below exercises the parser itself, so it must run
 	# whether or not the LSP is present.
 	failures += _range_parity(out)
-	var ucd = Parser.UClassDetail
+	var ucd = Parser.URClassDetail
 	if ucd.global_class_registry.is_empty():
 		ucd.global_class_registry = ucd.get_all_global_class_paths()
 	var native := LspSupport.available()

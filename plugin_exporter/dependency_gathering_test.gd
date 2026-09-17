@@ -1,0 +1,196 @@
+@tool
+extends EditorScript
+## Exercises the real export crawl and rewrites. The exporter requires editor services.
+
+const DIR = "user://pe_gathering_tests/"
+const UtilsLocal = preload("res://addons/plugin_exporter/src/class/utils_local.gd")
+const FileUtils = UtilsLocal.ExportFileUtils
+const Keys = FileUtils.KeysData
+
+static var _failures:Array[String] = []
+static var _passed:int = 0
+
+
+static func run_tests() -> Dictionary:
+	if not Engine.is_editor_hint():
+		return {"result": 0, "output": ["dependency_gathering: skipped (editor only)"]}
+	_failures = []
+	_passed = 0
+	_clear_fixtures(DIR)
+	_test_roots_and_recursion()
+	_test_ignores_and_rewrites()
+	_test_classes_and_reduction()
+	_test_replacement()
+	_test_scan_consumers()
+	_clear_fixtures(DIR)
+	var output:Array = ["dependency_gathering: %d passed, %d failed" % [_passed, _failures.size()]]
+	output.append_array(_failures)
+	return {"result": _failures.size(), "output": output}
+
+
+func _run() -> void:
+	print("\n".join(run_tests().output))
+
+
+static func _test_roots_and_recursion() -> void:
+	var leaf = _w("external/leaf.gd", "extends RefCounted\n")
+	var branch = _w("external/branch.gd", 'const Leaf = preload("./leaf.gd")\n')
+	var optional = _w("external/optional.gd", "extends RefCounted\n")
+	var root = _w("plugin/plain.gd", 'const Branch = preload("%s")\nvar optional = load("%s")\n' % [branch, optional])
+	var export = _crawl([root])
+	_check("untagged script seeded", export.files_to_scan_for_deps.has(root), true)
+	_check("direct dependency copied", export.files_to_copy.has(branch), true)
+	_check("transitive dependency copied", export.files_to_copy.has(leaf), true)
+	_check("load stays opt-in", export.files_to_copy.has(optional), false)
+	_w("plugin/plain.gd", 'var optional = load("%s") #! dependency current\n' % optional)
+	export = _crawl([root])
+	_check("tagged load copied", export.files_to_copy.has(optional), true)
+	_check("tag placement retained", export.adjusted_remote_paths.get(optional), DIR + "plugin/optional.gd")
+	_w("external/branch.gd", 'const Leaf = preload("./leaf.gd")\nconst Root = preload("%s")\n' % root)
+	_w("plugin/plain.gd", 'const Branch = preload("%s")\nconst Leaf = preload("%s")\n' % [branch, leaf])
+	export = _crawl([root])
+	_check("cycle terminates with shared leaf", export.files_to_copy.size(), 3)
+	var scene = _w("plugin/plain.tscn", '[gd_scene load_steps=2 format=3]\n[ext_resource type="Script" path="%s" id="1"]\n' % leaf)
+	_check("scene gathers scripts", _crawl([scene]).files_to_copy.has(leaf), true)
+
+
+static func _test_ignores_and_rewrites() -> void:
+	var leaf = _w("external/ignored.gd", "extends RefCounted\n")
+	var root = _w("plugin/ignored.gd", 'const Leaf = preload("%s") #! ignore-remote\n' % leaf)
+	var export = _crawl([root])
+	_check("ignored preload absent", export.files_to_copy.has(leaf), false)
+	var ignored_line = 'const Leaf = preload("%s") #! ignore-remote' % leaf
+	_w("plugin/ignored.gd", ignored_line + '\nconst Other = preload("%s")\n' % leaf)
+	export = _crawl([root])
+	_check("unignored occurrence still copies", export.files_to_copy.has(leaf), true)
+	var parser = export.file_parser.default_parsers.gd
+	export.file_parser.current_file_path_parsing = root
+	export.file_parser.current_adjusted_file_path = "res://addons/test/ignored.gd"
+	export.adjusted_remote_paths[leaf] = "res://addons/test/remote/ignored.gd"
+	for relative in [false, true]:
+		export.use_relative_paths = relative
+		_check("ignored path untouched relative=%s" % relative, parser._update_paths(ignored_line), ignored_line)
+		_check("unignored path rewritten relative=%s" % relative,
+			parser._update_paths('const Other = preload("%s")' % leaf).contains(leaf), false)
+	_w("plugin/ignored.gd", '#! ignore-remote\nconst Leaf = preload("%s")\n' % leaf)
+	_check("header does not disable file", _crawl([root]).files_to_copy.has(leaf), true)
+
+
+static func _test_classes_and_reduction() -> void:
+	var leaf = _w("external/class_leaf.gd", "extends RefCounted\n")
+	var hub = _w("external/hub.gd", 'const Leaf = preload("./class_leaf.gd")\n')
+	var root = _w("plugin/classes.gd", "var optional = Hub.Leaf #! ignore-remote\n")
+	var classes = {"Hub": hub}
+	var export = _crawl([root], classes, true)
+	_check("ignored class absent", export.global_classes_used.has("Hub"), false)
+	_check("ignored access target absent", export.files_to_copy.has(leaf), false)
+	_check("ignored reduction absent", export.access_reductions.get(root, {}).is_empty(), true)
+	_w("plugin/classes.gd", "var optional = Hub.Leaf #! ignore-remote\nvar included = Hub.Leaf\n")
+	export = _crawl([root], classes, true)
+	_check("unignored reduction copied", export.files_to_copy.has(leaf), true)
+	_check("ignored use does not retain hub", export.files_to_copy.has(hub), false)
+	_check("unignored reduction recorded", export.access_reductions.get(root, {}).has("Hub.Leaf"), true)
+	_w("plugin/classes.gd", "var included = Hub\nvar optional = Hub #! ignore-remote\n")
+	export = _crawl([root], classes)
+	_check("unignored global copied", export.files_to_copy.has(hub), true)
+	var data = FileUtils._get_global_classes_in_text(
+		"class_name Own extends Hub #! ignore-remote\n", {"Own": root, "Hub": hub})
+	_check("ignored header preserves declaration", data, {"global_class_definition": "Own"})
+	var ignored_binding = 'const Hub = preload("%s") #! ignore-remote' % hub
+	var lines = [ignored_binding, "var included = Hub"]
+	_w("plugin/classes.gd", "\n".join(lines))
+	export = _crawl([root], classes)
+	export.class_renames = classes.duplicate()
+	export.file_parser.current_file_path_parsing = root
+	var rendered = export.file_parser.default_parsers.gd.post_export_edit_file(root, lines)
+	_check("ignored binding not injected twice", "\n".join(rendered).count("const Hub ="), 1)
+	_check("ignored binding text preserved", rendered[0], ignored_binding)
+	_w("plugin/classes.gd", "var ignored = Hub #! ignore-remote\n")
+	export = _crawl([root], classes)
+	export.class_renames = classes.duplicate()
+	export.file_parser.current_file_path_parsing = root
+	rendered = export.file_parser.default_parsers.gd.post_export_edit_file(root)
+	_check("ignored global does not inject preload", "\n".join(rendered).contains("preload("), false)
+
+
+static func _test_replacement() -> void:
+	var leaf = _w("external/replacement_leaf.gd", "extends RefCounted\n")
+	var base = _w("external/base.gd", 'const Leaf = preload("./replacement_leaf.gd")\n')
+	var stub = _w("plugin/stub.gd", '#! remote\nextends "%s"\n' % base)
+	var export = _crawl([stub])
+	_check("remote stub replacement retained", export.files_to_copy[stub].get(Keys.REPLACE_WITH), base)
+	_check("replacement base not copied twice", export.files_to_copy.has(base), false)
+	_check("replacement dependency copied", export.files_to_copy.has(leaf), true)
+	_check("base references redirected to stub", export.adjusted_remote_paths.get(base), stub)
+	_w("plugin/stub.gd", '#! remote\nextends "%s" #! ignore-remote\n' % base)
+	export = _crawl([stub])
+	_check("ignored extends does not replace", export.files_to_copy[stub].has(Keys.REPLACE_WITH), false)
+	_check("ignored extends does not gather", export.files_to_copy.has(base), false)
+	_w("plugin/stub.gd", 'extends "%s"\n' % base)
+	export = _crawl([stub])
+	_check("ordinary extends keeps original script", export.files_to_copy[stub].has(Keys.REPLACE_WITH), false)
+	_check("ordinary extends gathers base", export.files_to_copy.has(base), true)
+
+
+static func _test_scan_consumers() -> void:
+	var leaf = _w("external/consumer_leaf.gd", "extends RefCounted\n")
+	var root = _w("plugin/consumer.gd", 'const Leaf = preload("%s") #! ignore-remote\n' % leaf)
+	var report = load("res://addons/plugin_exporter/src/class/release/require_report.gd")
+	_check("require ignores tagged edge", report._scan_files([root], {}).has(leaf), false)
+	var view = load("res://addons/plugin_exporter/src/gui/panels/dep_view.gd").new()
+	Engine.get_main_loop().root.add_child(view)
+	view.set_current_file(root)
+	_check("dependency view ignores tagged edge", view.dep_graph.get_dep_graph().has(leaf), false)
+	_w("plugin/consumer.gd", 'const Leaf = preload("%s") #! ignore-remote\nconst Other = preload("%s")\n' % [leaf, leaf])
+	_check("require retains other reference", report._scan_files([root], {}).has(leaf), true)
+	view.set_current_file(root)
+	_check("dependency view retains other reference", view.dep_graph.get_dep_graph().has(leaf), true)
+	view.queue_free()
+
+
+static func _crawl(roots:Array, classes:Dictionary = {}, reduce:bool = false):
+	var config = _w("config.json", JSON.stringify({
+		"export_root": DIR + "out", "plugin_folder": "test", "options": {}, "exports": []}))
+	var data = UtilsLocal.ExportData.new(config)
+	data.class_list = classes
+	data.class_list_array = classes.keys()
+	var export = UtilsLocal.ExportObj.new()
+	export.export_data = data
+	export.source = DIR + "plugin/"
+	export.plugin_name = export.source
+	export.remote_dir = export.source + "remote"
+	export.export_dir_path = DIR + "out"
+	export.reduce_access_paths = reduce
+	export.file_parser = UtilsLocal.FileParser.new()
+	export.file_parser.set_export_obj(export)
+	for root in roots:
+		export.valid_files_for_transfer[root] = {Keys.TO: DIR + "out/" + root.get_file()}
+	export.sort_valid_files()
+	export.get_global_classes_used_in_valid_files()
+	export.get_file_dependencies()
+	return export
+
+
+static func _w(relative:String, text:String) -> String:
+	var path = DIR + relative
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var file = FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(text)
+	return path
+
+
+static func _check(label:String, actual, expected) -> void:
+	if actual == expected:
+		_passed += 1
+	else:
+		_failures.append("FAIL %s: expected %s, got %s" % [label, expected, actual])
+
+
+static func _clear_fixtures(dir:String) -> void:
+	if not DirAccess.dir_exists_absolute(dir):
+		return
+	for name in DirAccess.get_files_at(dir):
+		DirAccess.remove_absolute(dir.path_join(name))
+	for name in DirAccess.get_directories_at(dir):
+		_clear_fixtures(dir.path_join(name))
+	DirAccess.remove_absolute(dir)

@@ -87,7 +87,7 @@ static func _test_head_is_deepest_file() -> void:
 
 ## The collector walks a local `const X = preload()` head just as happily, but the exporter must
 ## not reduce it: a plugin's own aggregator ("UtilsRemote.URegex") is deliberate indirection that
-## `#! remote` already handles, and only a global-class head can be a namespace hub.
+## ordinary preload rewriting already handles; only a global-class head can be a namespace hub.
 static func _test_local_const_head() -> void:
 	var leaf = _w("r_leaf4.gd", "extends RefCounted\n")
 	var mid = _w("r_mid4.gd", 'const Leaf = preload("%s")\n' % leaf)

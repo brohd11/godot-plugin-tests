@@ -61,6 +61,10 @@ func _init() -> void:
         printerr("COMPOSITION_RUNTIME_FAILED")
         quit(1)
         return
+    if User.early_check() != [5, ["early", "after", 0, "after", 1, "after"]]:
+        printerr("EARLY_RETURN_RUNTIME_FAILED")
+        quit(1)
+        return
     var result:Array = User.run()
     if result != [5.0, 9.0, 10.0, 9.0] or User.reference_score() != 9:
         printerr("OPTIMIZER_RUNTIME_FAILED ", result)
@@ -95,6 +99,8 @@ func _init() -> void:
         else:
             assert "if Helpers.is_gdscript_path(path):" not in rendered
             assert stats["inline_calls"] >= 4 and stats["inline_expanded_calls"] >= 2, stats
+            assert stats["inline_early_return_calls"] >= 1, stats
+            assert "Helpers.early_value(value)" in rendered and "Helpers.early_effect(events, value)" not in rendered
             assert "Helpers.affine(number)" not in rendered and "Helpers.struct_score(" not in rendered
             assert stats["scalar_structs"] >= 1, stats
         if entry["name"] == "references":

@@ -329,7 +329,7 @@ static func _get_ctx(cache: Dictionary, script_path: String) -> Dictionary:
 ## absent in a headless run - so populate it directly from ProjectSettings (mirrors the editor) so
 ## `class_name` fixtures resolve here too.
 static func _ensure_global_class_registry() -> void:
-	var ucd = GDScriptParser.UClassDetail
+	var ucd = GDScriptParser.URClassDetail
 	if ucd.global_class_registry.is_empty():
 		ucd.global_class_registry = ucd.get_all_global_class_paths()
 

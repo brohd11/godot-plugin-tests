@@ -31,6 +31,7 @@ static func run_tests() -> Dictionary:
 	_test_handler_values()
 	_test_handler_declines()
 	_test_scan_end_to_end()
+	_test_ignore_remote()
 
 	_reset_dir()
 
@@ -91,6 +92,18 @@ static func _test_scan_end_to_end() -> void:
 
 
 # --- harness -----------------------------------------------------------------------------
+
+static func _test_ignore_remote() -> void:
+	var asset = _w("ignored_asset.gd", "extends RefCounted\n")
+	var source = _w("ignored_source.gd", 'const Asset = preload("%s") #! ignore-remote\n' % asset)
+	var scanner = Dependencies.open(source)
+	scanner.use_project_classes = false
+	scanner.ignore_line_tags = [DependencyTags.IGNORE_REMOTE]
+	scanner.add_tag_handler(DependencyTags.TAG, DependencyTags.dependency_dir())
+	_check("ignore-remote: preload not gathered", scanner.get_graph().has(asset), false)
+	_w("ignored_source.gd", 'const Asset = preload("%s") #! ignore-remote\n#! dependency "%s"\n' % [asset, asset])
+	_check("ignore-remote: another explicit dependency still gathers", scanner.get_graph().has(asset), true)
+
 
 static func _dir(value:String, raws:Array):
 	var result = DependencyTags.dependency_dir().call(_ctx(value, raws))

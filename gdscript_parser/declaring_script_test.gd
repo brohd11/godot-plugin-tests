@@ -150,7 +150,7 @@ static func _find_caret(lines: PackedStringArray, anchor: String) -> Vector2i:
 
 
 static func _ensure_global_class_registry() -> void:
-	var ucd = GDScriptParser.UClassDetail
+	var ucd = GDScriptParser.URClassDetail
 	if ucd.global_class_registry.is_empty():
 		ucd.global_class_registry = ucd.get_all_global_class_paths()
 
