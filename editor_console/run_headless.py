@@ -27,14 +27,28 @@ renderer/rendering_method="gl_compatibility"
 ''')
         commands = [
             [args.godot, '--headless', '--path', str(project), '--editor', '--import'],
+            # Import registers global classes but does not compile every script body.
+            [args.godot, '--headless', '--path', str(project), '--script', 'res://addons/editor_console/src/editor_console.gd', '--check-only'],
+            [args.godot, '--headless', '--path', str(project), '--script', 'res://tests/editor_console/runtime_test.gd', '--check-only'],
             [args.godot, '--headless', '--path', str(project), '--script', 'res://tests/editor_console/runtime_test.gd'],
         ]
         for command in commands:
-            result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
-            if result.returncode or 'SCRIPT ERROR:' in result.stdout or 'Parse Error:' in result.stdout:
-                print(result.stdout)
+            stage = 'isolated import' if '--import' in command else (
+                'parse ' + command[command.index('--script') + 1] if '--check-only' in command else 'runtime tests')
+            print(f'Running: {stage}', flush=True)
+            try:
+                result = subprocess.run(command, stdin=subprocess.DEVNULL, text=True,
+                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+            except subprocess.TimeoutExpired as error:
+                output = error.stdout or b''
+                print(output.decode(errors='replace') if isinstance(output, bytes) else output, flush=True)
+                print(f'FAIL: {stage} timed out after {error.timeout}s', flush=True)
                 return 1
-            print('PASS: isolated import' if '--import' in command else result.stdout, flush=True)
+            if result.returncode or 'SCRIPT ERROR:' in result.stdout or 'Parse Error:' in result.stdout:
+                print(result.stdout, flush=True)
+                print(f'FAIL: {stage}', flush=True)
+                return 1
+            print(f'PASS: {stage}' if '--import' in command or '--check-only' in command else result.stdout, flush=True)
         return 0
     finally:
         if not args.keep:
