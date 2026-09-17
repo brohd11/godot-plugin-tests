@@ -48,6 +48,7 @@ func run_sync():
 	_test_highlighting()
 	_test_echo_formatting()
 	_test_script_highlighter_logic()
+	_test_streaming()
 
 
 ## Console popup sizing and input delivery need rendered frames; headless only.
@@ -55,6 +56,7 @@ func run_frames():
 	await _test_console()
 	await _test_console_path_completion()
 	await _test_async()
+	await _test_streaming_console()
 
 
 func _run_async(text:String, ctx:Sh.Context) -> Sh.Context:
@@ -98,6 +100,155 @@ func _test_async():
 	check(not console.is_busy and console.input.editable, "console unlocks after the command")
 	await _tree().process_frame # Resumed inside command_finished's emission, which locks the console.
 	console.free()
+
+
+func stream_session():
+	var ctx = session()
+	ctx.scopes.merge(Sh.Load.load_directory(FIXTURES + "stream/"), true)
+	# The raw fixture lives outside `commands/`, and the parser only produces raw args for
+	# names collected here.
+	ctx.scopes.merge(Sh.Load.load_directory(FIXTURES + "raw/"), true)
+	ctx.collect_raw_commands()
+	return ctx
+
+## Wait for a console to go idle. Bounded, and never waits on `command_finished`: a submission
+## that never pauses emits it during `execute()`, before an await could register.
+func _await_idle(console) -> void:
+	for i in 120:
+		if not console.is_busy: return
+		await _tree().process_frame
+
+## Run input with a recording sink installed. Returns the context and every streamed chunk.
+func _streamed(text:String, ctx:Sh.Context=null) -> Dictionary:
+	if ctx == null: ctx = stream_session()
+	var log:Array = []
+	ctx.output_sink = func(chunk:String, is_error:bool): log.append([chunk, is_error])
+	var result = _sync("execute_command_multiline", [text, ctx])
+	ctx.clear_output_sink()
+	return {"ctx": result, "log": log}
+
+func _joined(log:Array, is_error:bool) -> String:
+	var joined = ""
+	for entry in log:
+		if entry[1] == is_error: joined += entry[0]
+	return joined
+
+
+## The live output channel: text reaches the host as a command produces it, exactly once, and
+## only when it is genuinely screen-bound.
+func _test_streaming():
+	var data = _streamed("echo a; echo b")
+	equal(_joined(data.log, false), "a\nb\n", "streams each line as it is produced")
+	equal(data.log.size(), 2, "each echo streams one chunk")
+	equal(data.ctx.stdout, _joined(data.log, false), "streamed stdout matches the buffer")
+
+	data = _streamed("sink")
+	equal(_joined(data.log, false), "stdin:\n", "streams stdout")
+	equal(_joined(data.log, true), "sink diagnostic\n", "streams stderr")
+	check(data.log.size() == 2 and not data.log[0][1] and data.log[1][1], "stderr interleaves in production order")
+
+	# Redirection: a routed stream becomes file data and must not reach the host.
+	data = _streamed("echo a >discard")
+	equal(data.log.size(), 0, "redirected stdout does not stream")
+	data = _streamed("sink 2>discard")
+	equal(_joined(data.log, false), "stdin:\n", "a routed stderr leaves stdout streaming")
+	equal(_joined(data.log, true), "", "redirected stderr does not stream")
+	data = _streamed("sink &>discard")
+	equal(data.log.size(), 0, "&> routes both streams away from the host")
+
+	# A leaked capture counter would silently disable streaming for the rest of the submission.
+	data = _streamed("echo a >discard; echo b")
+	equal(_joined(data.log, false), "b\n", "streaming resumes after a redirected command")
+	data = _streamed("echo a >missing_dir/out.txt; echo b")
+	check(_joined(data.log, true).contains("cannot open"), "a failed redirect streams its diagnostic")
+	equal(_joined(data.log, false), "b\n", "streaming resumes after a failed redirect")
+
+	# Pipelines: only the final stage reaches the host, and stderr is never piped.
+	data = _streamed("echo a | sink")
+	equal(_joined(data.log, false), "stdin:a\n", "only the final pipe stage streams stdout")
+	equal(_joined(data.log, true), "sink diagnostic\n", "a pipe stage still streams stderr")
+	data = _streamed("echo a | sink | sink")
+	equal(_joined(data.log, false), "stdin:stdin:a\n", "intermediate pipe stages do not stream")
+
+	# `$(...)`: its stdout is the value, not screen output; its stderr still shows, once.
+	data = _streamed("echo $(counter)")
+	equal(data.log.size(), 1, "a substitution body does not stream its value")
+	data = _streamed("echo $(nope_missing_command)")
+	equal(_joined(data.log, true).count("Unrecognized command"), 1, "a failing substitution streams its error once")
+
+	# Roll-ups emit once each: the child streams, the parent absorbs.
+	for sample in [
+		["(echo a)", "subshell"],
+		["for x in a { echo $x }", "for body"],
+		["f() { echo a }; f", "function body"],
+		["if true { echo a }", "if body"],
+	]:
+		data = _streamed(sample[0])
+		equal(_joined(data.log, false), "a\n", "streams once through a " + sample[1])
+		equal(data.ctx.stdout, _joined(data.log, false), "buffer matches the stream through a " + sample[1])
+	data = _streamed("raw hello")
+	equal(_joined(data.log, false), "hello\n", "a raw command streams once")
+	equal(_joined(data.log, true), "raw diagnostic\n", "a raw command streams stderr once")
+
+	# Children inherit a capture in progress.
+	data = _streamed("(echo a | sink) >discard")
+	equal(_joined(data.log, false), "", "a redirected subshell suppresses its pipeline stdout")
+	data = _streamed("for x in a b { echo $x | sink }")
+	equal(_joined(data.log, false), "stdin:a\nstdin:b\n", "a loop streams only its final pipe stages")
+
+	# write_output keeps text verbatim, including a partial line.
+	data = _streamed("emit")
+	equal(data.log.size(), 2, "verbatim writes stream as written")
+	equal(_joined(data.log, false), "ab\n", "verbatim writes are not normalized")
+	data = _streamed("echo")
+	equal(_joined(data.log, false), "\n", "a bare echo streams its blank line")
+
+	# Propagation, and the unchanged no-sink path the MCP bridge uses.
+	var ctx = stream_session()
+	ctx.output_sink = func(_t, _e): pass
+	ctx.begin_capture(true, false)
+	var child = Sh.Context.new_ctx("child", ctx)
+	check(child.output_sink.is_valid(), "new_ctx copies the sink")
+	check(not child.should_stream(), "new_ctx copies stdout capture")
+	check(child.should_stream(true), "capture state is tracked per stream")
+	ctx.end_capture(true, false)
+	equal(run_text("echo a", stream_session()).stdout, "a\n", "a context with no sink behaves as before")
+
+
+## The transcript shows streamed output while the command runs, and never prints it twice.
+func _test_streaming_console():
+	var console = Sh.Console.new(Sh.Context.new_ctx("stream console", stream_session()))
+	var transcript = console.create_output()
+	_tree().root.add_child(console)
+	console.execute("stream_probe 3") # Not awaited: returns at the first pause.
+	await _tree().process_frame
+	await _tree().process_frame
+	check(console.is_busy, "the probe is still running while its output streams")
+	check(transcript.get_parsed_text().contains("line0"), "transcript shows output before the command finishes")
+	await _await_idle(console)
+	var result = console.last_result
+	var shown = transcript.get_parsed_text()
+	equal(shown.count("line0"), 1, "streamed output is not printed again by the result")
+	equal(shown.count("line2"), 1, "the final line appears exactly once")
+	equal(result.stdout, "line0\nline1\nline2\n", "the buffer still holds the whole output")
+	check(not result.output_sink.is_valid(), "the sink is removed when the submission ends")
+	console.queue_free()
+
+	# Streaming off renders exactly as it did before: one append once the command finishes.
+	var plain = Sh.Console.new(Sh.Context.new_ctx("plain console", stream_session()))
+	var plain_output = plain.create_output()
+	_tree().root.add_child(plain)
+	plain.stream_output = false
+	# More lines than the frames waited below, so the probe is certainly still running when
+	# the transcript is checked: a finished command would print its result legitimately.
+	plain.execute("stream_probe 6")
+	await _tree().process_frame
+	await _tree().process_frame
+	check(plain.is_busy, "the probe is still running with streaming off")
+	check(not plain_output.get_parsed_text().contains("line0"), "streaming off shows nothing until the end")
+	await _await_idle(plain)
+	equal(plain_output.get_parsed_text().count("line0"), 1, "streaming off still prints the result once")
+	plain.queue_free()
 
 
 func finish() -> Array[String]:
