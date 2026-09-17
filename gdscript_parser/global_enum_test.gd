@@ -13,7 +13,6 @@ extends RefCounted
 ##
 ##     load("res://tests/gdscript_parser/global_enum_test.gd").run_tests()
 
-const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const Keys = GDScriptParser.Keys
 
 const SCENARIO := "res://tests/gdscript_parser/scenarios/scenario_global_enum.gd"

@@ -5,7 +5,6 @@ extends SceneTree
 ##
 ##     Godot --headless --path . --script res://tests/gdscript_parser/nameless_enum_lambda_test.gd
 
-const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const Keys = GDScriptParser.Keys
 

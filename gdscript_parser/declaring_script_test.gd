@@ -15,7 +15,6 @@ extends SceneTree
 ##
 ##     Godot --headless --path . --script res://tests/gdscript_parser/declaring_script_test.gd
 
-const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const Utils = GDScriptParser.Utils
 
 const DIR := "res://tests/gdscript_parser/"

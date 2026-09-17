@@ -19,7 +19,6 @@ extends RefCounted
 ## NOT reliably hot-reloaded - use the clean-compile headless runner:
 ##     Godot --headless --path . --script res://tests/syntax_plus/run_headless.gd
 
-const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const LspSupport = preload("res://tests/syntax_plus/lsp_support.gd")
 const HighlighterLogic = preload("res://addons/syntax_plus/src/highlighter/highlighter_logic.gd")
 

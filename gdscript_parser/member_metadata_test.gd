@@ -12,10 +12,9 @@ extends SceneTree
 ##
 ##     Godot --headless --path . --script res://tests/gdscript_parser/member_metadata_test.gd
 
-const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const Keys = GDScriptParser.Keys
-const UString = GDScriptParser.UString
+const URString = GDScriptParser.URString
 
 const DIR := "res://tests/gdscript_parser/"
 const TEST_CACHE_DIR := "res://.godot/addons/gdscript_parser/parse_cache_meta_test"

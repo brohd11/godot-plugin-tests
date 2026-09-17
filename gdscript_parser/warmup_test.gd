@@ -6,7 +6,6 @@ extends SceneTree
 ##
 ##     Godot --headless --path . --script res://tests/gdscript_parser/warmup_test.gd
 
-const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const ParserWarmup = preload("res://addons/addon_lib/brohd/alib_editor/misc/parser/editor_parser/warmup.gd")
 
 const DIR := "res://tests/gdscript_parser/"

@@ -9,7 +9,6 @@ extends RefCounted
 ##
 ##     load("res://tests/gdscript_parser/builtin_return_test.gd").run_tests()
 
-const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 const BuiltInChecker = GDScriptParser.BuiltInChecker
 
 

@@ -5,7 +5,6 @@ extends SceneTree
 ##
 ##     Godot_mono_463 --headless --path . --script res://tests/gdscript_parser/cross_script_cache_test.gd
 
-const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 
 const DIR := "res://tests/gdscript_parser/"
 const TEST_CACHE_DIR := "res://.godot/addons/gdscript_parser/parse_cache_test"

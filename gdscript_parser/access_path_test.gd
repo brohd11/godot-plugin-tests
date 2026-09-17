@@ -14,7 +14,6 @@ extends RefCounted
 ## clean-compile headless runner:
 ##     godot --headless --path . --script res://tests/gdscript_parser/run_headless.gd
 
-const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Utils.UGDScript.Parser
 
 const DIR := "res://tests/gdscript_parser/"
 const BASIC := DIR + "scenarios/scenario_basic.gd"

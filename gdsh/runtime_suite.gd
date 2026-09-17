@@ -1,7 +1,7 @@
 extends RefCounted
 ## GDSh runtime checks, driven by runtime_test.gd (headless and editor console `test`).
 
-const Sh = preload("res://addons/addon_lib/gdsh/_ns/gdsh.gd")
+const Sh = preload("res://addons/addon_lib/gdsh/_ns/gd_sh.gd")
 const Utils = preload("res://addons/addon_lib/gdsh/internal/utils.gd")
 const FIXTURES = "res://tests/gdsh/fixtures/"
 const COMMANDS = FIXTURES + "commands/"
