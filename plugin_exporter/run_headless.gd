@@ -8,6 +8,7 @@ const SUITES:PackedStringArray = [
 	"res://tests/plugin_exporter/access_reduction_test.gd",
 	"res://tests/plugin_exporter/license_resolution_test.gd",
 	"res://tests/plugin_exporter/dep_resolver_test.gd",
+	"res://tests/plugin_exporter/require_update_test.gd",
 	"res://tests/plugin_exporter/repo_cache_test.gd",
 	"res://tests/plugin_exporter/toolchain_test.gd",
 	"res://tests/plugin_exporter/package_layout_test.gd",
