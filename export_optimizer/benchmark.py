@@ -73,7 +73,7 @@ renderer/rendering_method="gl_compatibility"
         assert hashes(project) == before, "Export modified source files"
         stats_match = re.search(r"struct stats=(\{[^\n]+\})", log)
         metadata[name] = {"structs": structs, "scalar": scalar, "read_types": mode,
-                          "inline": inline, "allow_ref_counted": references, "stats": json.loads(stats_match[1]) if stats_match else {}}
+                          "inline": inline, "scalar_replacement_allow_ref_counted": references, "struct_read_types_allow_ref_counted": references, "stats": json.loads(stats_match[1]) if stats_match else {}}
         print(f"Exported {name}", flush=True)
     runtime = args.release_runtime or args.godot
     samples = {name: [] for name in metadata}

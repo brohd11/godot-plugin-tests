@@ -5,7 +5,7 @@ func _init() -> void:
 
 func _run() -> void:
 	var failures := 0
-	for name in ["registry", "scanner", "metadata", "editor_service"]:
+	for name in ["options", "registry", "scanner", "metadata", "editor_service"]:
 		if name == "editor_service" and "--core" in OS.get_cmdline_user_args():
 			continue
 		var suite = load("res://tests/tag_parser/%s_test.gd" % name)

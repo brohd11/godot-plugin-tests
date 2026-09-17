@@ -32,6 +32,12 @@ static func run_tests() -> Dictionary:
 	preflight.prepare({INLINE: INLINE, VALUE: VALUE, BAD: BAD}, {}, passes)
 	if preflight.errors.is_empty() or not preflight.replacements.is_empty():
 		failures.append("failed combined preflight retained replacements")
+	for references in [false, true]:
+		for variants in [false, true]:
+			preflight.prepare({INLINE: INLINE}, {}, [Preflight.Optimizer.InlinePass], {
+				"inline_functions_allow_ref_counted": references, "inline_functions_allow_variants": variants})
+			if not preflight.errors.is_empty() or preflight.stats.get("inline_calls", 0) != 1 + int(references) + int(variants):
+				failures.append("inline opt-ins were not independently forwarded by preflight")
 	for mode in 3:
 		var options := {"scalar_replacement": true, "struct_read_types": mode}
 		preflight.prepare({VALUE: VALUE}, {}, [Preflight.Optimizer.StructPass], options)

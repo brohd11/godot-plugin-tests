@@ -16,11 +16,13 @@ def main():
         project = Path(directory)
         for relative in (
             "addons/addon_lib/tag_parser/scanner.gd",
+            "addons/addon_lib/tag_parser/options.gd",
             "addons/addon_lib/tag_parser/registry.gd",
             "addons/addon_lib/tag_parser/editor/metadata.gd",
             "tests/tag_parser/run_headless.gd",
             "tests/tag_parser/registry_test.gd",
             "tests/tag_parser/scanner_test.gd",
+            "tests/tag_parser/options_test.gd",
             "tests/tag_parser/metadata_test.gd",
         ):
             target = project / relative

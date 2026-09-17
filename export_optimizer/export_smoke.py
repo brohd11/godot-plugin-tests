@@ -83,11 +83,12 @@ def run(godot, project, *args, expected_error=False):
     return result.stdout
 
 
-def preset(project, enabled, mode, inline=False, scalar=False, read_types=0, allow_ref_counted=False):
+def preset(project, enabled, mode, inline=False, scalar=False, read_types=0, allow_references=False):
     (project / "optimizer.yaml").write_text(
-        f"structs: {str(enabled).lower()}\ninline_functions: {str(inline).lower()}\n"
+        f"structs: {str(enabled).lower()}\ninline_functions: {str(inline).lower()}\ndebug_tags: {str(inline).lower()}\n"
         f"scalar_replacement: {str(scalar).lower()}\nstruct_read_types: {('off', 'typed_locals', 'as_casts')[read_types]}\n"
-        f"allow_ref_counted: {str(allow_ref_counted).lower()}\n"
+        f"scalar_replacement_allow_ref_counted: {str(allow_references).lower()}\n"
+        f"struct_read_types_allow_ref_counted: {str(allow_references).lower()}\n"
     )
     return f'''[preset.0]
 name="Smoke"
@@ -112,8 +113,8 @@ def hashes(project):
 def check_configuration(godot, project, before):
     cases = [
         ("defaults", True, "", None, False, True),
-        ("partial-references", True, "optimizer.yaml", "allow_ref_counted: true\n", False, True),
-        ("reference-casts", True, "res://optimizer.yaml", "allow_ref_counted: true\nstruct_read_types: as_casts\n", False, True),
+        ("partial-references", True, "optimizer.yaml", "scalar_replacement_allow_ref_counted: true\nstruct_read_types_allow_ref_counted: true\n", False, True),
+        ("reference-casts", True, "res://optimizer.yaml", "scalar_replacement_allow_ref_counted: true\nstruct_read_types_allow_ref_counted: true\nstruct_read_types: as_casts\n", False, True),
         ("disabled", False, "res://missing.yaml", None, False, False),
         ("missing", True, "res://missing.yaml", None, True, False),
         ("invalid", True, "res://optimizer.yaml", "scalar_replacement: wrong\n", True, False),
@@ -204,9 +205,11 @@ renderer/rendering_method="gl_compatibility"
             if inline:
                 rendered = package.read("user.gd").decode()
                 assert "return 2 * affine(value, 3)" not in rendered, rendered
+                assert "if is_gdscript_path(path):" not in rendered, rendered
                 assert "return value * scale + value - 3" in rendered, rendered
                 assert "return expanded_vector(Vector2(2, 3), 2.0)" not in rendered, rendered
                 assert "_inline_" in rendered, rendered
+                assert "# optimizer-inline;" in rendered, rendered
                 assert "return step()" not in rendered, rendered
                 assert "var total := read_value(value)" not in rendered, rendered
                 assert "User.read_value(value)" not in package.read("main.gd").decode()

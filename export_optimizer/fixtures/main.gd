@@ -5,6 +5,11 @@ const Blind = preload("blind.gd")
 const References = preload("references.gd")
 
 func _init() -> void:
+	for path:String in ["test.gd", "test.gd.remap", "test.gd::Inner", "image.png"]:
+		if User.path_check(path) != (path != "image.png"):
+			printerr("PREDICATE_SMOKE_FAILED")
+			quit(1)
+			return
 	var value := User.make_value()
 	var struct_total := User.read_value(value)
 	var expanded := User.expanded_vector(Vector2(2, 3), 2.0)

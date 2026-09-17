@@ -50,17 +50,28 @@ def main():
         script = "res://" + entry["install"] + "/src/core/optimizer_user.gd"
         core = "res://" + entry["install"] + "/src/core/"
         constructor = "new" if entry["name"] == "disabled" else "create"
+        expected_calls = 2 if entry["name"] in ("disabled", "inline-off", "struct-only") else 1
         element_type = "Vec" if entry["name"] == "disabled" else "Array"
         (project / "run.gd").write_text(f'''extends SceneTree
 const User = preload("{script}")
 const Access = preload("{core}struct_access.gd")
 const Vec = preload("{core}struct_vec.gd")
 func _init() -> void:
+    if User.substitution_check() != {expected_calls} or User.nested_check(2.0) != 23.0:
+        printerr("COMPOSITION_RUNTIME_FAILED")
+        quit(1)
+        return
     var result:Array = User.run()
     if result != [5.0, 9.0, 10.0, 9.0] or User.reference_score() != 9:
         printerr("OPTIMIZER_RUNTIME_FAILED ", result)
         quit(1)
         return
+    for path:String in ["test.gd", "test.gd.remap", "test.gd::Inner", "image.png"]:
+        var expected:bool = path != "image.png"
+        if User.path_check(path) != expected or User.dynamic_path_check(path) != expected:
+            printerr("PREDICATE_RUNTIME_FAILED")
+            quit(1)
+            return
     var values:Array[{element_type}] = [Vec.{constructor}(3.0, 4.0), Vec.{constructor}(5.0, 6.0)]
     var checks:Array = [Access.length_sq(values[0]), Access.local_typed(), Access.local_inferred(),
         Access.from_return(), Access.loop_sum(values), Access.indexed(values),
@@ -82,10 +93,15 @@ func _init() -> void:
         elif entry["name"] in ("inline-off", "struct-only"):
             assert stats.get("inline_calls", 0) == 0 and "Helpers.affine(number)" in rendered
         else:
-            assert stats["inline_calls"] >= 3 and stats["inline_expanded_calls"] >= 2, stats
+            assert "if Helpers.is_gdscript_path(path):" not in rendered
+            assert stats["inline_calls"] >= 4 and stats["inline_expanded_calls"] >= 2, stats
             assert "Helpers.affine(number)" not in rendered and "Helpers.struct_score(" not in rendered
             assert stats["scalar_structs"] >= 1, stats
         if entry["name"] == "references":
+            package_source = "\n".join(path.read_text() for path in target.rglob("*.gd"))
+            for marker in ("# optimizer-inline;", "# optimizer-struct;", "# optimizer-scalar-replacement;", "# optimizer-struct-read;"):
+                assert marker in package_source, marker
+            assert "return false or Helpers.is_gdscript_path(path)" not in rendered
             assert stats["scalar_structs"] > 3, stats
         if entry["name"] in ("inline-off", "references"):
             assert stats["struct_read_casts"] > 0 and stats["struct_typed_captures"] == 0, stats

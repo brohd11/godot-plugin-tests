@@ -60,3 +60,12 @@ static func step(value:int = DEFAULT_STEP) -> int:
 	return value + 1
 static func same_file_default() -> int:
 	return step()
+
+#! inline
+static func is_gdscript_path(path:String) -> bool:
+	return path.ends_with(".gd") or path.contains(".gd.") or path.contains(".gd::")
+
+static func path_check(path:String) -> bool:
+	if is_gdscript_path(path):
+		return true
+	return false

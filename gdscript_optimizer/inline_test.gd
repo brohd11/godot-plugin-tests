@@ -17,7 +17,7 @@ static func run_tests() -> Dictionary:
 	var optimizer = Optimizer.new()
 	var result = optimizer.prepare(sources, Optimizer.Context.new(), [Optimizer.InlinePass])
 	_check("prepare", result.errors, [])
-	_check("unsupported definitions diagnosed", result.warnings.size(), 3)
+	_check("unsupported definitions diagnosed", result.warnings.size(), 2)
 	for path:String in sources:
 		var source := FileAccess.get_file_as_string(path)
 		var lines := Array(source.split("\n"))
@@ -25,7 +25,7 @@ static func run_tests() -> Dictionary:
 		_check("apply " + path, edited.errors, [])
 		_check("source immutable", "\n".join(lines), source)
 		var text := "\n".join(edited.lines)
-		_check("supported sites " + path, edited.stats.inline_calls, 2 if path.ends_with("math.gd") else 8)
+		_check("supported sites " + path, edited.stats.inline_calls, 2 if path.ends_with("math.gd") else 10)
 		var transformed := GDScript.new()
 		transformed.source_code = text
 		var compiled := transformed.reload()
@@ -42,9 +42,9 @@ static func run_tests() -> Dictionary:
 			_check("skipped sites diagnosed", edited.warnings.size(), edited.stats.inline_skipped)
 			_check("zero divisor stays runtime expression", text.contains("_divisor:int = 0"), true)
 			_check("conversion expanded", text.contains("return Math.fraction(value)"), false)
-			_check("direct path retained", edited.stats.inline_direct_calls, 5)
+			_check("direct path retained", edited.stats.inline_direct_calls, 7)
 			_check("expanded path counted", edited.stats.inline_expanded_calls, 3)
-			_check("nested calls preserved", text.contains("Math.affine(Math.affine(value, 2), 3)"), true)
+			_check("nested calls expanded", text.contains("Math.affine(Math.affine(value, 2), 3)"), false)
 			_check("shadowed alias preserved", text.contains("return Math.affine(value, 3)"), true)
 			for value:int in [-10, 0, 7]:
 				_check("cross script equivalence", transformed.cross(value), original.cross(value))

@@ -13,6 +13,7 @@ const GDScriptParser = preload("uid://c4465kdwgj042") #! resolve ALibRuntime.Uti
 const DIR := "res://tests/gdscript_parser/"
 const TEST_CACHE_DIR := "res://.godot/addons/gdscript_parser/parse_cache_test"
 const FIXTURES := [
+	DIR + "fixtures/variadic.gd",
 	DIR + "scenarios/scenario_inheritance.gd",
 	DIR + "scenarios/scenario_basic.gd",
 	DIR + "fixtures/gp_service.gd",
@@ -70,6 +71,14 @@ static func _run_case(out: Array, script_path:String) -> int:
 		out.append("  FAIL  %s -> rehydrated parser not in CACHED_RESOLVED state" % script_path)
 		return 1
 
+	if script_path.ends_with("variadic.gd"):
+		for name:String in ["sample", "implicit"]:
+			for instance in [parser, rehydrated]:
+				var function = instance.get_class_object().functions[name]
+				var arguments:Dictionary = function.get_arguments()
+				if function.rest_argument != "rest" or arguments.rest.type != "Array" or not arguments.rest.get("is_rest", false):
+					out.append("FAIL variadic metadata missing after parsing/cache load")
+					return 1
 	var after := _emit(rehydrated)
 	var diff := _first_diff(before, after, "")
 	if diff != "":

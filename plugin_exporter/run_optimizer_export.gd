@@ -30,7 +30,11 @@ func run() -> void:
 		if variant == "inline-off":
 			options.inline_functions = false
 		elif variant == "references":
-			options.allow_ref_counted = true
+			options.scalar_replacement_allow_ref_counted = true
+			options.struct_read_types_allow_ref_counted = true
+			options.inline_functions_allow_variants = true
+			options.inline_functions_allow_ref_counted = true
+			options.debug_tags = true
 		elif variant == "struct-only":
 			options = {"inline_functions": false, "scalar_replacement": false, "struct_read_types": "off"}
 		entry.parser_overide_settings = {"parse_gd": {"optimizer": options}}

@@ -15,8 +15,8 @@ static func run_tests() -> Dictionary:
 		failures.append(str(prepared.errors))
 	var edited = optimizer.apply(path, Array(source.split("\n")))
 	var text := "\n".join(edited.lines)
-	if edited.stats.inline_expanded_calls != 9:
-		failures.append("expected 9 expansions; got " + str(edited.stats))
+	if edited.stats.inline_expanded_calls != 8 or edited.stats.inline_direct_calls != 1:
+		failures.append("expected 8 templates and one nested direct expansion; got " + str(edited.stats))
 		print(text)
 	var transformed := GDScript.new()
 	transformed.source_code = text
@@ -39,7 +39,7 @@ static func run_tests() -> Dictionary:
 		failures.append("source changed")
 	if not text.contains("return compute(dynamic, 2)"):
 		failures.append("expanded a Variant argument")
-	if prepared.warnings.size() != 7:
+	if prepared.warnings.size() != 5:
 		failures.append("unsupported definitions missing diagnostics: " + str(prepared.warnings))
 	var caller := BASE + "expanded_caller.gd"
 	optimizer.prepare({path: path, caller: caller}, Optimizer.Context.new(), [Optimizer.InlinePass])
