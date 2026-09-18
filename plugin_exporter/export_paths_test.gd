@@ -17,6 +17,7 @@ static func run_tests() -> Dictionary:
 	_passed = 0
 
 	_test_export_folder_error()
+	_test_targets()
 
 	var output:Array[String] = []
 	output.append("export_paths: %d passed, %d failed" % [_passed, _failures.size()])
@@ -44,3 +45,19 @@ static func _check(label:String, got, expected) -> void:
 		_passed += 1
 		return
 	_failures.append("%s (expected %s, got %s)" % [label, expected, got])
+
+
+static func _test_targets() -> void:
+	var expected = "res://addons/addon_lib/brohd"
+	for target in ["addon_lib/brohd", "./addon_lib/brohd/", "res://addons/addon_lib/brohd/",
+			ProjectSettings.globalize_path(expected), "addon_lib/other/../brohd"]:
+		_check("target: " + target, ExportPaths.resolve_target(target), expected)
+	_check("outside addons", ExportPaths.resolve_target("res://lib/pkg"), "res://lib/pkg")
+	_check("relative parent", ExportPaths.resolve_target("../lib/pkg"), "res://lib/pkg")
+	_check("project root", ExportPaths.resolve_target("res://"), "res://")
+	for invalid in ["", "  ", "user://pkg", "uid://abc", "https://host/pkg", "../../outside",
+			"res://../outside", ProjectSettings.globalize_path("res://").trim_suffix("/") + "-other/pkg"]:
+		_check("invalid: " + invalid, ExportPaths.resolve_target(invalid), "")
+	_check("workspace aliases", ExportPaths.workspace_key(expected), ExportPaths.workspace_key("addon_lib/brohd"))
+	_check("workspace stays flat", "/" in ExportPaths.workspace_key(expected), false)
+	_check("workspace basename collision", ExportPaths.workspace_key("lib/pkg") == ExportPaths.workspace_key("res://lib/pkg"), false)

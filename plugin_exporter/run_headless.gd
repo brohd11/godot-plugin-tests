@@ -15,6 +15,9 @@ const SUITES:PackedStringArray = [
 	"res://tests/plugin_exporter/release_cache_test.gd",
 	"res://tests/plugin_exporter/export_ignore_test.gd",
 	"res://tests/plugin_exporter/export_paths_test.gd",
+	"res://tests/plugin_exporter/package_discovery_test.gd",
+	"res://tests/plugin_exporter/package_targets_test.gd",
+	"res://tests/plugin_exporter/release_runner_test.gd",
 	"res://tests/plugin_exporter/doc_viewer/markdown_parser_test.gd",
 	"res://tests/plugin_exporter/doc_viewer/doc_index_test.gd",
 ]

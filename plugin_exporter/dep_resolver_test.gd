@@ -358,6 +358,12 @@ static func _test_export_ignore_names() -> void:
 	_check("_export_ignore: resolved " + str(r.errors), lock.is_empty(), false)
 	_check("_export_ignore: preferred config followed", lock.get("deps", []).map(func(e): return e.repo_id),
 		["github.com/me/a", "github.com/me/c"])
+	f.repos[t]["v1"]["_export_ignore/export.yml"] = _ex(["me/b@v1"])
+	r = DepResolver.new(f)
+	lock = r.resolve(t, "v1", "res://lib/t")
+	_check("export.yml outside addons: resolved " + str(r.errors), lock.is_empty(), false)
+	_check("export.yml preferred over legacy", lock.get("deps", []).map(func(e): return e.repo_id), ["github.com/me/b"])
+	_check("non-addon target retained", lock.get("target", {}).get("path"), "res://lib/t")
 
 
 ## plugin_export.yml text with the given build_require / compile_require lists.
