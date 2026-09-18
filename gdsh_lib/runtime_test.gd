@@ -9,7 +9,7 @@ func _initialize():
 
 
 func _run():
-	var res = run_tests()
+	var res = await run_tests()
 	print("\n".join(res.output))
 	quit(0 if res.result == 0 else 1)
 
@@ -17,4 +17,5 @@ func _run():
 static func run_tests() -> Dictionary:
 	var suite = Suite.new()
 	suite.run_sync()
+	await suite.run_frames()
 	return {"result": suite.failures, "output": suite.finish()}

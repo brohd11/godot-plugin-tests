@@ -20,10 +20,15 @@ func run_sync():
 	_test_filesystem()
 	_test_class()
 	_test_tree()
+	preload("res://tests/gdsh_lib/tui_tests.gd").new().run_sync(self)
+
+
+func run_frames() -> void:
+	await preload("res://tests/gdsh_lib/tui_tests.gd").new().run_frames(self)
 
 
 func finish() -> Array[String]:
-	report.append("GDSh utils: %d checks, %d failures" % [checks, failures])
+	report.append("GDSh libraries: %d checks, %d failures" % [checks, failures])
 	return report
 
 

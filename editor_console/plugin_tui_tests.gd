@@ -103,7 +103,7 @@ func run(suite) -> void:
 	suite.check(display.get_parsed_text().contains("row29") and display.get_v_scroll_bar().value == 0, "plugin End updates its drawn viewport")
 	_fixture(program.directory, "000first", "First")
 	await _key(program, KEY_R)
-	suite.check(program._plugins[program._selected].id == "row29", "plugin refresh preserves selection by directory identifier")
+	suite.check(program._screen.list.get_selected().id == "row29", "plugin refresh preserves selection by directory identifier")
 	_remove(program.directory, "row29")
 	await _key(program, KEY_ENTER)
 	suite.check(program.calls.size() == 3 and program.hint.contains("disappeared"), "plugin removed before toggle produces feedback without touching another addon")

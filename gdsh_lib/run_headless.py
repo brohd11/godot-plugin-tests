@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build an isolated project with GDSh and the gdsh_lib utils and tree libs and run their runtime tests (Python 3, Godot 4.6+)."""
+"""Build an isolated project with GDSh and the gdsh_lib utils, tree, and tui libs and run their runtime tests (Python 3, Godot 4.6+)."""
 import argparse
 import re
 import shutil
@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-MODULES = [Path('addons/addon_lib/gdsh'), Path('addons/addon_lib/util_r'), Path('addons/addon_lib/gdsh_lib/utils'), Path('addons/addon_lib/gdsh_lib/tree'), Path('tests/gdsh_lib')]
+MODULES = [Path('addons/addon_lib/gdsh'), Path('addons/addon_lib/util_r'), Path('addons/addon_lib/gdsh_lib/utils'), Path('addons/addon_lib/gdsh_lib/tree'), Path('addons/addon_lib/gdsh_lib/tui'), Path('tests/gdsh_lib')]
 
 
 def main():
@@ -76,7 +76,7 @@ binary_format/architecture="x86_64"
             print(('PASS: project export' if '--export-pack' in command else 'PASS: project import') if quiet else re.sub(r'\x1b\[[0-9;]*m', '', result.stdout), flush=True)
             if result.returncode or 'SCRIPT ERROR:' in result.stdout or 'Parse Error:' in result.stdout:
                 return 1
-        print(f'PASS: runtime isolation; {len(scripts)} scripts, only GDSh, gdsh_lib utils, and their tests')
+        print(f'PASS: runtime isolation; {len(scripts)} scripts, only GDSh, gdsh_lib, and their tests')
         return 0
     finally:
         if not args.keep:
