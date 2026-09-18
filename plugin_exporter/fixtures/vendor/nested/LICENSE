@@ -1,0 +1,5 @@
+PET_VENDOR_NESTED_LICENSE
+
+Fixture only, not a real grant. A second LICENSE one level under vendor/LICENSE: closest-ancestor
+matching has to hand this subtree here while vendor/ keeps the rest, so both arrive. Matching in
+scan order let the outer license swallow the subtree.

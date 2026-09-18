@@ -1,0 +1,5 @@
+PET_VENDOR_LICENSE
+
+Fixture only, not a real grant. Stands in for a third-party root LICENSE so gather_licenses has an
+outer domain to match. It sits outside the plugin because a license inside the exported source is
+skipped and ships at its own path, and check_ignore hard-blocks anything under export_ignore/.
