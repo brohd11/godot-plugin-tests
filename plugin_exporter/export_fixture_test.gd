@@ -125,11 +125,12 @@ static func _test_layout() -> void:
 	_check("dependency tag: plain", _found(dir, "yaml_parser/version.cfg"), true)
 
 	_check("licenses gathered", _found(dir, "licenses/addon_lib_brohd/LICENSE"), true)
-	# addon_lib/brohd/dock_manager/config carries its own LICENSE under brohd's. Closest-ancestor
-	# matching has to hand that subtree to the nested one while the rest still lands under brohd,
-	# so both arrive - matching in scan order let the outer license swallow the subtree.
+	# addon_lib/dock_manager/config carries its own LICENSE under the package's own. Closest-ancestor
+	# matching has to hand that subtree to the nested one while the rest still lands under the
+	# package, so both arrive - matching in scan order let the outer license swallow the subtree.
+	_check("package license gathered", _found(dir, "licenses/addon_lib_dock_manager/LICENSE"), true)
 	_check("nested license gathered alongside its parent",
-		_found(dir, "licenses/addon_lib_brohd_dock_manager_config/LICENSE"), true)
+		_found(dir, "licenses/addon_lib_dock_manager_config/LICENSE"), true)
 	# res:// is held out of the matching, so no license lands from an empty flattened dir name.
 	_check("no project-root license", _exists(dir, "licenses/LICENSE"), false)
 

@@ -10,7 +10,7 @@ extends EditorScript
 const ExportObj = preload("res://addons/plugin_exporter/src/class/utils_local.gd").ExportObj
 
 const LIB = "res://addons/addon_lib/brohd"
-const CONFIG = "res://addons/addon_lib/brohd/dock_manager/config"
+const CONFIG = "res://addons/addon_lib/dock_manager/config"
 const PLUGIN = "res://addons/my_plugin"
 
 const LIB_LICENSE = LIB + "/LICENSE"
