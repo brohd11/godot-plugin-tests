@@ -62,6 +62,7 @@ func run_sync():
 ## Console popup sizing and input delivery need rendered frames; headless only.
 func run_frames():
 	await _test_console()
+	await _test_console_popup_navigation()
 	await _test_console_path_completion()
 	await _test_console_node_completion()
 	await _test_console_mixed_path_completion()
@@ -1585,6 +1586,116 @@ func _test_console():
 	else:
 		await _test_console_input_consumption(console, transcript)
 	console.queue_free()
+
+
+func _test_console_popup_navigation() -> void:
+	var console = Sh.Console.new(session())
+	_tree().root.add_child(console)
+	console.size = Vector2(640, 400)
+	var input = console.input
+	var options = Sh.Options.new()
+	for group in 3:
+		options.add_separator("Group %d" % group)
+		for index in 20:
+			options.add_option("choice_%02d" % (group * 20 + index))
+	input.completion_factory = func(text, context, caret):
+		var request = FixedCompletion.new(text, context, caret)
+		request.choices = options.get_options()
+		return request
+	await input.request_completion(true)
+	input._timer.stop()
+	input.grab_focus()
+	var popup = input._popup
+	# Reserve horizontal scrollbar space to exercise the reduced visible height.
+	popup.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
+	for frame in 2: await _tree().process_frame
+	var selectable:Array[int] = []
+	for index in popup._items.item_count:
+		if not popup._items.is_item_disabled(index):
+			selectable.append(index)
+	equal(popup._items.get_selected_items()[0], selectable[0], "popup initially skips the group heading")
+	_check_popup_selection_visible(popup, "initial selection")
+	check(popup.get_h_scroll_bar().visible, "popup exercises visibility with a horizontal scrollbar")
+	var probe = InputProbe.new()
+	_tree().root.add_child(probe)
+	var key = InputEventKey.new()
+	key.pressed = true
+	var position = 0
+	for direction in [1, -1]:
+		key.keycode = KEY_DOWN if direction == 1 else KEY_UP
+		for step in selectable.size() + 1:
+			key.echo = step > 0
+			if Engine.is_editor_hint():
+				input._on_gui_input(key)
+			else:
+				Input.parse_input_event(key)
+			position = posmod(position + direction, selectable.size())
+			for frame in 2: await _tree().process_frame
+			equal(popup._items.get_selected_items()[0], selectable[position], "arrow press/repeat advances past separators (%d, %d)" % [direction, step])
+			_check_popup_selection_visible(popup, "arrow navigation (%d, %d)" % [direction, step])
+	check(probe.events.is_empty(), "popup arrow presses and repeats remain consumed")
+	probe.queue_free()
+
+	# Already-visible rows should not move the viewport.
+	popup.select_next()
+	for frame in 2: await _tree().process_frame
+	var previous_scroll = popup.scroll_vertical
+	popup.select_previous()
+	for frame in 2: await _tree().process_frame
+	equal(popup.scroll_vertical, previous_scroll, "visible selection does not scroll unnecessarily")
+
+	var submissions:Array = []
+	var acceptances:Array = []
+	input.submit_requested.connect(func(value): submissions.append(value))
+	popup.choice_accepted.connect(func(choice, _data): acceptances.append(choice))
+	for code in [KEY_ENTER, KEY_KP_ENTER, KEY_TAB]:
+		key.keycode = code
+		key.echo = true
+		input._on_gui_input(key)
+	check(submissions.is_empty() and acceptances.is_empty() and popup.visible, "echoed Enter and Tab do not submit or accept")
+
+	# Wrap to the last choice, then rebuild while still overflowing.
+	popup.select_previous()
+	for frame in 2: await _tree().process_frame
+	check(popup.scroll_vertical > 0, "wrapping up scrolls to the last choice")
+	options.add_option("new choice")
+	await input.request_completion(true)
+	for frame in 2: await _tree().process_frame
+	equal(popup._items.get_selected_items()[0], selectable[0], "rebuilt choices select the first enabled row")
+	_check_popup_selection_visible(popup, "rebuilt selection after scrolling")
+
+	# A delayed scroll must not affect a hidden popup.
+	await input.request_completion(true)
+	input._hide_completion()
+	previous_scroll = popup.scroll_vertical
+	for frame in 2: await _tree().process_frame
+	check(not popup.visible and popup.scroll_vertical == previous_scroll, "pending visibility update leaves hidden popup alone")
+	var history:Array = []
+	input.history_requested.connect(func(direction): history.append(direction))
+	for code in [KEY_UP, KEY_DOWN]:
+		key.keycode = code
+		key.echo = true
+		input._on_gui_input(key)
+	check(history.is_empty(), "echoed arrows do not navigate command history")
+	for code in [KEY_UP, KEY_DOWN]:
+		key.keycode = code
+		key.echo = false
+		input._on_gui_input(key)
+	equal(history, [-1, 1], "initial arrows still navigate command history")
+	console.queue_free()
+	await _tree().process_frame
+
+
+func _check_popup_selection_visible(popup, label:String) -> void:
+	var row:Rect2 = popup._items.get_item_rect(popup._items.get_selected_items()[0])
+	row.position += popup._items.global_position
+	var panel:StyleBox = popup.get_theme_stylebox("panel")
+	var top:float = popup.global_position.y + panel.get_margin(SIDE_TOP)
+	var bottom:float = popup.global_position.y + popup.size.y - panel.get_margin(SIDE_BOTTOM)
+	if popup.get_h_scroll_bar().visible:
+		bottom -= popup.get_h_scroll_bar().size.y
+	check(row.position.y >= top - 1.0 and row.end.y <= bottom + 1.0,
+		"selected row is fully visible: %s (row %s, viewport %s..%s)" % [label, row, top, bottom])
 
 
 func _accept_console_choice(input, prefix:String, choice:String, expected:String, suffix:String="") -> void:
