@@ -14,6 +14,7 @@ static var _passed:int = 0
 static func run_tests() -> Dictionary:
 	_failures = []
 	_passed = 0
+	Discovery.clear_cache()
 	Runner.remove_dir(ProjectSettings.globalize_path(ROOT))
 	_write("top/plugin.cfg")
 	_write("top/version.cfg")
@@ -39,12 +40,40 @@ static func run_tests() -> Dictionary:
 	_check("new filename first", ExportIgnore.config_path(ROOT.path_join("top")), ROOT.path_join("top/_export_ignore/export.yml"))
 	DirAccess.remove_absolute(ROOT.path_join("top/_export_ignore/export.yml"))
 	_check("folder precedence first", ExportIgnore.config_path(ROOT.path_join("top")), ROOT.path_join("top/_export_ignore/plugin_export.yml"))
+	_test_cache()
 	DirAccess.remove_absolute(ROOT.path_join("loop"))
 	Runner.remove_dir(ProjectSettings.globalize_path(ROOT))
+	Discovery.clear_cache()
 	var output:Array[String] = ["package_discovery: %d passed, %d failed" % [_passed, _failures.size()]]
 	for failure in _failures:
 		output.append("  FAIL  " + failure)
 	return {"result": _failures.size(), "output": output}
+
+
+static func _test_cache() -> void:
+	_write("added/version.cfg")
+	_write("top/nested/_export_ignore/export.yml")
+	DirAccess.remove_absolute(ROOT.path_join("group/lib/export_ignore/plugin_export.json"))
+	_check("package scan cached", Discovery.discover(ROOT, Discovery.Filter.ALL).keys(), ["group/lib", "top", "top/nested"])
+	_check("config presence cached", Discovery.discover(ROOT).keys(), ["group/lib", "top"])
+	_check("filters share snapshot", Discovery.discover(ROOT, Discovery.Filter.NOT_VALID).keys(), ["top/nested"])
+	_check("root aliases share snapshot", Discovery.discover(ProjectSettings.globalize_path(ROOT) + "/").keys(), ["group/lib", "top"])
+	var returned = Discovery.discover(ROOT)
+	returned["top"]["modified"] = true
+	returned.erase("group/lib")
+	_check("caller changes isolated", Discovery.discover(ROOT), {"group/lib": {}, "top": {}})
+	_write("missing/child/version.cfg")
+	_write("missing/child/_export_ignore/export.yml")
+	_check("empty scan cached", Discovery.discover(ROOT.path_join("missing")), {})
+	_check("separate scan root", Discovery.discover(ROOT.path_join("top"), Discovery.Filter.ALL).keys(), ["nested"])
+	Discovery.clear_cache()
+	_check("package addition after clear", Discovery.discover(ROOT, Discovery.Filter.ALL).keys(), ["added", "group/lib", "missing/child", "top", "top/nested"])
+	_check("config changes after clear", Discovery.discover(ROOT).keys(), ["missing/child", "top", "top/nested"])
+	_check("unconfigured after clear", Discovery.discover(ROOT, Discovery.Filter.NOT_VALID).keys(), ["added", "group/lib"])
+	_check("empty root refreshed", Discovery.discover(ROOT.path_join("missing")).keys(), ["child"])
+	DirAccess.remove_absolute(ROOT.path_join("added/version.cfg"))
+	Discovery.clear_cache()
+	_check("package removal after clear", Discovery.discover(ROOT, Discovery.Filter.ALL).keys(), ["group/lib", "missing/child", "top", "top/nested"])
 
 
 static func _write(relative:String) -> void:
