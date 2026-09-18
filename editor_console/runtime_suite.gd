@@ -7,6 +7,49 @@ var failures:int = 0
 var report:Array[String] = []
 var _ctx:Sh.Context
 
+class CurrentScriptProbe extends "res://addons/editor_console/src/default_commands/editor/script/script.gd":
+	var selected:Script
+	func _current_script() -> Script:
+		return selected
+
+class EditorRouterProbe extends "res://addons/editor_console/src/default_commands/editor/editor.gd":
+	var selected:Script
+	var exact_override:bool = false
+	func _get_commands() -> Dictionary:
+		var commands = preload("res://addons/editor_console/src/default_commands/editor/editor.gd").new().get_commands()
+		commands["script"][&"get_command"] = func():
+			var command = CurrentScriptProbe.new()
+			command.selected = selected
+			return command
+		if exact_override:
+			commands["script.Inner"] = {&"get_command": func(): return preload("res://addons/addon_lib/gdsh/builtins/echo/echo.gd").new()}
+		return commands
+
+class TempConfig extends EditorConsoleSingleton.UtilsLocal.Config:
+	func write():
+		_write_config(data, file_path, false)
+
+class RegistryProbe extends "res://addons/editor_console/src/default_commands/config/global/registry/registry.gd":
+	var project_config
+	var user_config
+	func _target_config():
+		return user_config if global_flag else project_config
+
+class GlobalConfigProbe extends "res://addons/editor_console/src/default_commands/config/global/global.gd":
+	var project_config
+	var user_config
+	func _get_commands() -> Dictionary:
+		return {"registry": {&"get_command": func():
+			var command = RegistryProbe.new()
+			command.project_config = project_config
+			command.user_config = user_config
+			return command}}
+
+class ConfigRouterProbe extends "res://addons/editor_console/src/default_commands/config/config.gd":
+	var global_config
+	func _get_commands() -> Dictionary:
+		return {"global": {&"get_command": func(): return global_config}}
+
 func check(value:bool, label:String):
 	checks += 1
 	if not value:
@@ -61,6 +104,8 @@ func run_sync():
 		Sh.Execute.execute_command_multiline("os exit 7", result)
 		check(result.exit_code == 7, "OS status propagates")
 	_test_editor_behavior(ctx)
+	_test_script_adapter(ctx)
+	_test_global_registry(ctx)
 	_ctx = ctx
 
 ## Prompt path completion waits on the completion popup; headless only.
@@ -273,3 +318,80 @@ func _accept_path_choice(input, prefix:String, choice:String, expected:String):
 	input._timer.stop()
 	check(input.text == expected, "editor path insertion: " + input.text)
 	check(input.get_caret_column() == expected.length(), "editor path caret")
+
+
+func _test_script_adapter(parent:Sh.Context):
+	var ctx = Sh.Context.new_ctx("editor script", parent)
+	var router = EditorRouterProbe.new()
+	router.selected = load("res://tests/editor_console/fixtures/global_fixture.gd")
+	ctx.scopes["editor"] = {"script": router}
+	for head in ["editor script", "editor script.Inner"]:
+		var method = "greeting -- world" if head == "editor script" else "answer"
+		var result = _result(head + " call " + method, ctx)
+		check(result.exit_code == 0 and ("hello world" in result.stdout or "42" in result.stdout), "editor script routes " + head + ": " + result.stderr)
+		check(Sh.Completion.new(head + " call ", ctx).get_completions().has(method.get_slice(" ", 0)), "editor script method completion " + head)
+	var choices = Sh.Completion.new("editor script.In", ctx).get_completions()
+	check(choices.has("Inner") and choices.Inner[Sh.Options.Keys.METADATA][Sh.Options.Keys.INSERT] == "script.Inner", "editor member completion preserves selector")
+	var nested = _result("editor script.Inner.Nested call answer", ctx)
+	check(nested.exit_code == 0 and nested.stdout.strip_edges().ends_with("84"), "editor nested inner-class routing")
+	choices = Sh.Completion.new("editor script.Inner.N", ctx).get_completions()
+	check(choices.has("Nested") and choices.Nested[Sh.Options.Keys.METADATA][Sh.Options.Keys.INSERT] == "script.Inner.Nested", "editor nested completion preserves chain")
+	check(_result("editor script.Missing call answer", ctx).exit_code != 0, "editor missing member fails")
+	check(_result("editor script.Inner get_path", ctx).stdout.contains("inner_fixture.gd"), "editor preloaded member get_path")
+	check(not Sh.Completion.new("editor script ", ctx).get_completions().has("list_global"), "editor adapter exposes target commands only")
+	check(_result("editor script --class=GDSh call greeting", ctx).exit_code != 0, "editor adapter rejects replacement targets")
+	var result = _result("editor script --text", ctx)
+	check(result.exit_code == 0 and result.stdout.contains("class_name EditorConsoleMigrationFixture"), "editor --text reads selected resource")
+	router.exact_override = true
+	check(_result("editor script.Inner exact", ctx).stdout.strip_edges() == "exact", "exact editor children beat dotted fallback")
+	router.exact_override = false
+	router.selected = null
+	result = _result("editor script call greeting", ctx)
+	check(result.exit_code != 0 and result.stderr.contains("No script open"), "missing editor script error")
+	check(_result("editor script --help", ctx).exit_code == 0, "editor script help without a current script")
+	check(_result("script call greeting", ctx).exit_code != 0, "root script has no editor fallback")
+	router._ctx_obj = null # Break the test router/context cycle.
+
+
+func _test_global_registry(parent:Sh.Context):
+	var Config = EditorConsoleSingleton.UtilsLocal.Config
+	var project = TempConfig.new()
+	project.file_path = "user://registry_project_test.yml"
+	project.data = {}
+	var user = TempConfig.new()
+	user.file_path = "user://registry_user_test.yml"
+	user.data = {}
+	var global = GlobalConfigProbe.new()
+	global.project_config = project
+	global.user_config = user
+	var router = ConfigRouterProbe.new()
+	router.global_config = global
+	var ctx = Sh.Context.new_ctx("registry", parent)
+	ctx.scopes["config"] = {"script": router}
+	var name = "EditorConsoleMigrationFixture"
+	check(_result("config global registry --add " + name + " StaleClass", ctx).exit_code == 0, "registry adds several project names")
+	check(Config._get_config_data(project.file_path).get(Config.GLOBAL_CLASSES, []) == [name, "StaleClass"], "registry persists legacy config key")
+	check(user.data.is_empty(), "default registry edits do not affect user config")
+	check(_result("config global registry --add " + name, ctx).exit_code != 0, "registry duplicate error")
+	check(_result("config global registry --rm Missing", ctx).exit_code != 0, "registry missing removal error")
+	check(_result("config global registry --add --rm " + name, ctx).exit_code != 0, "registry conflicting flags error")
+	check(_result("config global registry " + name, ctx).stdout.contains("true"), "registry status query")
+	check(_result("config global registry --global --add GDSh", ctx).exit_code == 0, "registry user config selection")
+	check(Config._get_config_data(user.file_path).get(Config.GLOBAL_CLASSES, []) == ["GDSh"], "registry persists user selection")
+	var merged = project.data.duplicate(true)
+	Config._recursive_merge(merged, user.data)
+	ctx.host_data["script_targets"] = func(): return PackedStringArray(merged.get(Config.GLOBAL_CLASSES, []))
+	var choices = Sh.Completion.new("script ", ctx).get_completions()
+	check(choices.has(name) and choices.has("GDSh") and not choices.has("StaleClass"), "merged registry suggestions filter stale entries")
+	check(Sh.Completion.new("config global registry --rm ", ctx).get_completions().has("StaleClass"), "stale registrations can be removed through completion")
+	check(not Sh.Completion.new("config global registry --add ", ctx).get_completions().has(name), "add completion omits registered names")
+	check(_result("config global registry --rm " + name + " StaleClass", ctx).exit_code == 0, "registry removes several project names")
+	check(Config._get_config_data(project.file_path).get(Config.GLOBAL_CLASSES, []) == [], "registry removal persists")
+	ctx.host_data["script_targets"] = func(): return PackedStringArray()
+	check(_result(name + " call greeting -- unregistered", ctx).exit_code == 0, "unregistered classes still execute")
+	check(not parent.has_scope("global"), "no root global command restored")
+	check(Sh.Completion.new("config global ", parent).get_completions().has("registry"), "real config namespace discovers registry")
+	router._ctx_obj = null
+	global._ctx_obj = null
+	DirAccess.remove_absolute(project.file_path)
+	DirAccess.remove_absolute(user.file_path)

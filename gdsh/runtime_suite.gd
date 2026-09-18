@@ -46,6 +46,9 @@ func run_sync():
 	_test_bare_resolution()
 	_test_script_target()
 	_test_target_members()
+	_test_script_access()
+	_test_pwn()
+	_test_list_global()
 	_test_completion()
 	_test_structured_completion()
 	_test_hidden_scopes()
@@ -60,6 +63,7 @@ func run_sync():
 func run_frames():
 	await _test_console()
 	await _test_console_path_completion()
+	await _test_console_node_completion()
 	await _test_async()
 	await _test_streaming_console()
 
@@ -416,7 +420,7 @@ func _test_loading():
 	custom.scopes[script.get_command_name()] = {"script": script}
 	equal(run_text("probe", custom).stdout.strip_edges(), "default:false::", "manual registration")
 	var builtins = Sh.Load.load_builtins()
-	equal(builtins.size(), 24, "builtin manifest includes namespaces")
+	equal(builtins.size(), 25, "builtin manifest includes namespaces")
 	check(builtins.has("help") and builtins.has("clear"), "help and clear are builtins")
 	check(builtins.has("builtins") and builtins.has("hidden"), "builtins and hidden namespaces are registered")
 	for name in ["os", "global", "cat", "pwd"]:
@@ -434,7 +438,7 @@ func _test_builtins():
 	for text in ["", "bui"]:
 		var choices = complete(text, ctx)
 		check(not choices.has("builtins") and not choices.has("echo"), "builtins omitted from root completion: " + text)
-	var public_names = ["break", "continue", "return", "exit", "shift", "true", "false", "[", "expr", "echo", "source", "cd", "cn", "node", "gdsh", "script", "help", "hidden", "clear", "new_ctx", "undoredo"]
+	var public_names = ["break", "continue", "return", "exit", "shift", "true", "false", "[", "expr", "echo", "source", "cd", "cn", "pwn", "node", "gdsh", "script", "help", "hidden", "clear", "new_ctx", "undoredo"]
 	var choices = complete("builtins ", ctx)
 	var children = ctx.get_scope("builtins").script.new().get_commands()
 	equal(children.size(), public_names.size(), "parent discovers only public builtins")
@@ -605,6 +609,46 @@ func _test_working_node():
 	var choices = complete("cn ", ctx)
 	check(choices.has("Alpha"), "cn completes child nodes under cwn")
 	check(choices.has(".."), "cn completes the parent")
+
+	var internal = Node.new()
+	internal.name = "Internal"
+	alpha.add_child(internal, false, Node.INTERNAL_MODE_BACK)
+	for prefix in ["cn ", "node ", ""]:
+		for path in ["Alpha/", "Alpha/B", "./Alpha/B", base + "/Alpha/B"]:
+			choices = complete(prefix + path, ctx)
+			check(choices.has("Beta"), "nested node completion: " + prefix + path)
+			if choices.has("Beta"):
+				var meta = choices.Beta[Sh.Options.Keys.METADATA]
+				equal(meta[Sh.Options.Keys.INSERT], path.left(path.rfind("/") + 1) + "Beta", "node insertion keeps the path prefix")
+		for path in ["Alpha/", "Alpha/I"]:
+			equal(complete(prefix + path, ctx).has("Internal"), prefix != "cn ", "internal completion defaults: " + prefix + path)
+		choices = complete(prefix + "/", ctx)
+		check(choices.has(str(root.name)), "absolute node completion starts at the tree root: " + prefix)
+		check(not choices.has("Alpha"), "absolute slash does not list cwn children: " + prefix)
+		check(not complete(prefix + "Missing/", ctx).has("Alpha"), "missing parents do not fall back to cwn: " + prefix)
+	for flag in ["--internal", "-i"]:
+		for path in ["Alpha/", "Alpha/I", base + "/Alpha/I"]:
+			check(complete("cn " + flag + " " + path, ctx).has("Internal"), "cn internal flag completes children: " + flag + " " + path)
+		check(complete("cn " + flag + " Alpha/", ctx).has("Beta"), "cn internal flag retains ordinary children: " + flag)
+		check(not complete("cn " + flag + " ", ctx).has("--internal"), "cn hides consumed internal flag: " + flag)
+		var target_ctx = Sh.Context.new_ctx("internal cn", ctx, true)
+		var result = run_text("cn " + flag + " Alpha/Internal", target_ctx)
+		equal(result.exit_code, 0, "cn accepts internal flag: " + flag)
+		equal(target_ctx.cwn, base + "/Alpha/Internal", "cn flag selects internal child: " + flag)
+	check(not complete("cn Alpha/", ctx).has("Internal"), "cn internal flag does not leak between requests")
+	for text in ["cn ", "cn --int", "cn -", "cn Alpha "]:
+		check(complete(text, ctx).has("--internal"), "cn suggests its internal flag: " + text)
+	check(run_text("cn --help", Sh.Context.new_ctx("help", ctx)).stdout.contains("-i, --internal"), "cn help includes both internal flag forms")
+	var explicit_ctx = Sh.Context.new_ctx("explicit internal", ctx, true)
+	equal(run_text("cn Alpha/Internal", explicit_ctx).exit_code, 0, "explicit internal path works without a completion flag")
+	check(complete("Al", ctx).has("Alpha"), "partial bare node names complete from cwn")
+	check(complete("Alpha ", ctx).has("call"), "bare node target still completes subcommands")
+	check(complete("node Alpha ", ctx).has("call"), "explicit node target still completes subcommands")
+	check(complete("Alpha call ", ctx).has("--engine"), "bare node still routes member completion")
+	check(not complete("cn Alpha ", ctx).has("Beta"), "cn does not replace an already finished path")
+	check(not complete("echo Alpha/", ctx).has("Beta"), "node completion stays out of other arguments")
+	check(ctx.get_scope("Alpha/B") == null, "completion leaves execution resolution strict")
+	equal(ctx.cwn, base, "node completion does not change cwn")
 
 	root.remove_child(fixture)
 	fixture.free()
@@ -1643,6 +1687,56 @@ func _test_console_path_completion() -> void:
 		equal(DirAccess.remove_absolute(path), OK, "remove completion fixture")
 
 
+func _test_console_node_completion() -> void:
+	var fixture = Node.new()
+	fixture.name = "GDShNodeCompletion"
+	_tree().root.add_child(fixture)
+	var alpha = Node.new()
+	alpha.name = "Alpha"
+	fixture.add_child(alpha)
+	var beta = Node.new()
+	beta.name = "Beta"
+	alpha.add_child(beta)
+	var internal = Node.new()
+	internal.name = "Internal"
+	alpha.add_child(internal, false, Node.INTERNAL_MODE_BACK)
+	var leaf = Node.new()
+	leaf.name = "Leaf"
+	internal.add_child(leaf)
+	var spaced = Node.new()
+	spaced.name = "With Space"
+	alpha.add_child(spaced)
+	var deep = Node.new()
+	deep.name = "Deep Space"
+	spaced.add_child(deep)
+	var ctx = session()
+	ctx.cwn = str(fixture.get_path())
+	var console = Sh.Console.new(ctx)
+	_tree().root.add_child(console)
+	for prefix in ["cn ", "node ", ""]:
+		await _accept_console_choice(console.input, prefix + "Al", "Alpha", prefix + "Alpha/")
+		await _accept_console_choice(console.input, prefix + "Alpha/", "Beta", prefix + "Alpha/Beta/")
+		await _accept_console_choice(console.input, prefix + "Alpha/B", "Beta", prefix + "Alpha/Beta/")
+		var internal_prefix = "cn -i " if prefix == "cn " else prefix
+		await _accept_console_choice(console.input, internal_prefix + "Alpha/I", "Internal", internal_prefix + "Alpha/Internal/")
+		await _accept_console_choice(console.input, prefix + "Alpha/Internal/", "Leaf", prefix + "Alpha/Internal/Leaf/")
+		await _accept_console_choice(console.input, prefix + "./Alpha/B", "Beta", prefix + "./Alpha/Beta/")
+		await _accept_console_choice(console.input, prefix + ctx.cwn + "/Alpha/B", "Beta", prefix + ctx.cwn + "/Alpha/Beta/")
+		await _accept_console_choice(console.input, prefix + "Alpha/", "..", prefix + "Alpha/../")
+		await _accept_console_choice(console.input, prefix + "/", "root", prefix + "/root/")
+		await _accept_console_choice(console.input, prefix + '"Alpha/With', "With Space", prefix + '"Alpha/With Space/"')
+		await _accept_console_choice(console.input, prefix + '"Alpha/With Space/"', "Deep Space", prefix + '"Alpha/With Space/Deep Space/"')
+		await _accept_console_choice(console.input, "echo before; " + prefix + "Alpha/B", "Beta", "echo before; " + prefix + "Alpha/Beta/", " ; echo after")
+	await _accept_console_choice(console.input, "cn --int", "--internal", "cn --internal ")
+	await _accept_console_choice(console.input, "cn --internal Alpha/I", "Internal", "cn --internal Alpha/Internal/")
+	console.input.text = "cn Alpha/I"
+	console.input.set_caret_column(console.input.text.length())
+	await console.input.request_completion(true)
+	check(not console.input._popup._choices.has("Internal"), "cn popup hides internal children by default")
+	console.free()
+	fixture.free()
+
+
 func _test_console_input_consumption(console, transcript:RichTextLabel) -> void:
 	var probe = InputProbe.new()
 	_tree().root.add_child(probe)
@@ -1873,3 +1967,103 @@ func _test_target_members():
 	for subcommand in ["call", "list", "args", "get_path"]:
 		check(complete(node_head + " ", ctx).has(subcommand), "node completes " + subcommand)
 	node.free()
+
+
+func _test_script_access():
+	var ctx = session()
+	var path = FIXTURES + "dotted.gd.folder/target file.gd"
+	var script = load(path)
+	ctx.cwd = FIXTURES
+	var paths = [path, "dotted.gd.folder/target file.gd", "./dotted.gd.folder/target file.gd"]
+	# Packed resources do not have OS paths. Source runs also exercise localization.
+	var absolute_path = ProjectSettings.globalize_path(path)
+	if absolute_path.is_absolute_path():
+		paths.append(absolute_path)
+	for base in ["GDShAccessFixture"] + paths:
+		for suffix in ["", ".Inner", ".Inner.Nested", ".Inherited", ".Alias"]:
+			var expected = {"": "7", ".Inner": "42", ".Inner.Nested": "84", ".Inherited": "21", ".Alias": "21"}[suffix]
+			for head in ['script "' + base + suffix + '"', '"' + base + suffix + '"']:
+				var result = run_text(head + " call answer", Sh.Context.new_ctx("access", ctx))
+				check(result.exit_code == 0 and result.stdout.strip_edges().ends_with(expected), "member target " + head + ": " + result.stderr)
+	var user_path = "user://gdsh_access_external.gd"
+	_write_file(user_path, "extends RefCounted\nclass Inner:\n\tstatic func answer(): return 63\n")
+	for user_target in [user_path, ProjectSettings.globalize_path(user_path)]:
+		var result = run_text('"' + user_target + '.Inner" call answer', Sh.Context.new_ctx("external", ctx))
+		check(result.exit_code == 0 and result.stdout.strip_edges().ends_with("63"), "user/external script members: " + user_target + ": " + result.stderr)
+	DirAccess.remove_absolute(user_path)
+	for head in ['script --class=GDShAccessFixture.Inner', 'script --path="' + path + '.Inner"',
+			'echo "' + path + '.Inner" | script']:
+		var result = run_text(head + " call answer", Sh.Context.new_ctx("selectors", ctx))
+		check(result.exit_code == 0 and result.stdout.strip_edges().ends_with("42"), "selector/piped members: " + head + ": " + result.stderr)
+	for suffix in [".Missing", ".Inner.Missing", ".Scalar", ".Scalar.Inner", ".Inner..Nested", "."]:
+		var result = run_text("script GDShAccessFixture" + suffix + " call answer", Sh.Context.new_ctx("invalid", ctx))
+		check(result.exit_code != 0 and result.stderr.contains("Could not resolve script target"), "invalid chain fails: " + suffix)
+	check(run_text("script GDShAccessFixture.Missing", Sh.Context.new_ctx("invalid", ctx)).exit_code != 0, "invalid target fails without a subcommand")
+	for row in [
+		["script GDShAccessFixture.", "Inner", "GDShAccessFixture.Inner"],
+		["GDShAccessFixture.In", "Inner", "GDShAccessFixture.Inner"],
+		["GDShAccessFixture.Inner.N", "Nested", "GDShAccessFixture.Inner.Nested"],
+		['script "' + path + '.In"', "Inner", '"' + path + '.Inner"'],
+		['"' + path + '.In', "Inner", '"' + path + '.Inner"'],
+		["script --class=GDShAccessFixture.In", "Inner", "--class=GDShAccessFixture.Inner"],
+		['script --path="' + path + '.In"', "Inner", '--path="' + path + '.Inner"'],
+	]:
+		var choices = complete(row[0], ctx)
+		check(choices.has(row[1]), "member completion " + row[0] + ": " + str(choices.keys()))
+		if choices.has(row[1]):
+			equal(choices[row[1]][Sh.Options.Keys.METADATA][Sh.Options.Keys.INSERT], row[2], "completion preserves target prefix")
+	check(complete("GDShAccessFixture.Inner ca", ctx).has("call"), "partial subcommand completion after inner target")
+	check(complete('script "' + path + '.Inner" li', ctx).has("list"), "partial subcommand after quoted inner target")
+	check(not complete("GDShAccessFixture..", ctx).has("Inner"), "completion rejects empty member segments")
+	check(not complete("GDShAccessFixture.", ctx).has("Scalar"), "member completion excludes scalar constants")
+	check(complete("GDShAccessFixture.", ctx).has("Inherited"), "member completion includes inherited constants")
+	check(complete("GDShAccessFixture.Inner call ", ctx).has("answer"), "resolved members route method completion")
+	script.calls = 0
+	complete("GDShAccessFixture.", ctx)
+	equal(script.calls, 0, "member completion never executes methods")
+	ctx.host_data["current_script"] = func(): return script
+	check(run_text("script call answer", Sh.Context.new_ctx("no implicit", ctx)).exit_code != 0, "script ignores legacy current_script hook")
+	check(not ctx.has_scope("script.Inner"), "script.Inner is no longer a core editor alias")
+	equal(run_text("script", Sh.Context.new_ctx("help", ctx)).exit_code, 0, "targetless script prints help")
+	check(complete("script ", ctx).has("GDShAccessFixture"), "runtime script target completion lists global classes")
+	ctx.host_data["script_targets"] = func(): return PackedStringArray(["GDShAccessFixture", "NoLongerAClass"])
+	var choices = complete("script ", ctx)
+	check(choices.has("GDShAccessFixture") and not choices.has("NoLongerAClass") and not choices.has("GDShAccessAbstractFixture"), "host suggestions filter to valid registered classes")
+	check(complete("script GDShAcc", ctx).has("GDShAccessFixture"), "partial target uses registered suggestions")
+	check(complete("script --class=", ctx).has("GDShAccessAbstractFixture"), "--class completion stays unrestricted")
+	check(not complete("", ctx).has("GDShAccessFixture"), "registered script suggestions do not enter root completion")
+	ctx.host_data["script_targets"] = func(): return PackedStringArray()
+	check(run_text("GDShAccessFixture.Inner call answer", Sh.Context.new_ctx("unregistered", ctx)).exit_code == 0, "registry never restricts execution")
+	var old = ctx.get_scope("echo")
+	ctx.scopes[path + ".Inner"] = old
+	equal(run_text('"' + path + '.Inner" shadow', Sh.Context.new_ctx("precedence", ctx)).stdout.strip_edges(), "shadow", "exact registered commands beat bare script members")
+
+
+func _test_pwn():
+	var ctx = session()
+	equal(run_text("pwn", Sh.Context.new_ctx("pwn", ctx)).stdout, "/root\n", "pwn default")
+	var node = Node.new()
+	node.name = "GDShPwnFixture"
+	_tree().root.add_child(node)
+	var path = str(node.get_path())
+	run_text("cn " + path, ctx)
+	equal(run_text("pwn", Sh.Context.new_ctx("pwn", ctx)).stdout, path + "\n", "pwn follows cn and child inheritance")
+	equal(run_text("(cn /root; pwn); pwn", Sh.Context.new_ctx("subshell", ctx)).stdout.strip_edges(), "/root\n" + path, "subshell pwn does not change parent cwn")
+	node.free()
+	equal(run_text("builtins pwn", Sh.Context.new_ctx("stale", ctx)).stdout, path + "\n", "pwn prints stale stored path without fallback")
+	check(run_text("pwn extra", Sh.Context.new_ctx("args", ctx)).exit_code != 0, "pwn rejects arguments")
+	check(not complete("", ctx).has("pwn"), "pwn remains hidden from root completion")
+
+
+func _test_list_global():
+	var ctx = session()
+	for flags in ["--name=GDShAccessFixture", "--name=GDShAccessF*", "--name=*AccessFixture", "--name=*AccessF*", "--name=GDShAccessFixture --tool", "--name=GDShAccessFixture --base=RefCounted"]:
+		var result = run_text("script list_global " + flags, Sh.Context.new_ctx("global", ctx))
+		check(result.exit_code == 0 and result.stdout.contains("GDShAccessFixture"), "global listing filters " + flags)
+	for flags in ["--name=NotAClass", "--name=GDShAccessFixture --abstract", "--name=GDShAccessFixture --lang=CSharp", "--name=GDShAccessFixture --base=Node"]:
+		var result = run_text("script list_global " + flags, Sh.Context.new_ctx("empty", ctx))
+		check(result.exit_code == 0 and result.stdout.contains("No classes to show"), "empty global listing " + flags)
+	var result = run_text("script list_global --abstract --name=GDShAccessAbstractFixture", Sh.Context.new_ctx("abstract", ctx))
+	check(result.exit_code == 0 and result.stdout.contains("GDShAccessAbstractFixture"), "abstract class listing")
+	check(complete("script ", ctx).has("list_global"), "script exposes list_global without a target")
+	check(not complete("node /root ", ctx).has("list_global"), "node does not expose list_global")
