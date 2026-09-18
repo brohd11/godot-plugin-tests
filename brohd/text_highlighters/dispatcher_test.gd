@@ -6,7 +6,7 @@ extends SceneTree
 const Dispatcher = preload("res://addons/addon_lib/brohd/alib_runtime/misc/syntax_highlighters/text/dispatcher.gd")
 const TextHighlighter = preload("res://addons/addon_lib/brohd/alib_runtime/misc/syntax_highlighters/text/text_syntax_highlighter.gd")
 const Palette = preload("res://addons/addon_lib/brohd/alib_runtime/misc/syntax_highlighters/text/palette.gd")
-const PROVIDER = "res://addons/addon_lib/gdsh/internal/script_highlighter_logic.gd"
+const PROVIDER = "res://addons/addon_lib/gdsh/src/ui/script_highlighter_logic.gd"
 static var checks := 0
 static var failures := 0
 static var output:Array[String] = []

@@ -2,8 +2,8 @@ extends RefCounted
 ## GDSh runtime checks, driven by runtime_test.gd (headless and editor console `test`).
 
 const Sh = preload("res://addons/addon_lib/gdsh/_ns/gd_sh.gd")
-const Utils = preload("res://addons/addon_lib/gdsh/internal/utils.gd")
-const NodePaths = preload("res://addons/addon_lib/gdsh/internal/node_paths.gd")
+const Utils = preload("res://addons/addon_lib/gdsh/src/core/utils.gd")
+const NodePaths = preload("res://addons/addon_lib/gdsh/src/core/node_paths.gd")
 const FIXTURES = "res://tests/gdsh/fixtures/"
 const COMMANDS = FIXTURES + "commands/"
 const OVERRIDES = FIXTURES + "overrides/"
@@ -69,6 +69,7 @@ func run_frames():
 	await _test_async()
 	await _test_streaming_console()
 	if not Engine.is_editor_hint():
+		await preload("res://tests/gdsh/terminal_tests.gd").new().run(self)
 		await preload("res://tests/gdsh/tui_tests.gd").new().run(self)
 		await preload("res://tests/gdsh/tui_program_tests.gd").new().run(self)
 
@@ -595,7 +596,7 @@ func _test_working_node():
 	equal(NodePaths.resolve("..", base + "/Alpha"), fixture, "'..' resolves to the parent")
 	check(NodePaths.resolve("Missing", base) == null, "a missing node resolves to null")
 	# res:// must stay a script target; a node lookup would shadow it.
-	check(NodePaths.resolve("res://addons/addon_lib/gdsh/load.gd", base) == null, "resource paths are not node paths")
+	check(NodePaths.resolve("res://addons/addon_lib/gdsh/src/core/load.gd", base) == null, "resource paths are not node paths")
 	equal(NodePaths.cwn_node(base + "/Gone"), root, "an unresolvable cwn falls back to the tree root")
 
 	var ctx = session()
@@ -690,7 +691,7 @@ func _test_bare_resolution():
 	check(not ctx.has_scope("Missing"), "an unresolvable bare name does not resolve")
 
 	# Extensions classify before any tree lookup, so a resource path is never a node.
-	check(ctx.has_scope("res://addons/addon_lib/gdsh/load.gd"), "a .gd path routes to the script command, not a node")
+	check(ctx.has_scope("res://addons/addon_lib/gdsh/src/core/load.gd"), "a .gd path routes to the script command, not a node")
 	# Classification is by extension, so this resolves before the file is known to exist.
 	check(ctx.has_scope("boot.gdsh"), "a .gdsh path routes to the gdsh command, not a node")
 
@@ -870,7 +871,7 @@ func _test_fresh_user_commands():
 	var directory = "user://gdsh_fresh_command_test"
 	DirAccess.make_dir_recursive_absolute(directory)
 	var path = directory.path_join("fresh.gd")
-	var source = 'extends "res://addons/addon_lib/gdsh/command_base.gd"\n' \
+	var source = 'extends "res://addons/addon_lib/gdsh/src/core/command_base.gd"\n' \
 			+ 'static func get_command_name(): return "fresh"\n' \
 			+ 'static func get_self_command_data(): return _command_data({&"help": "fresh"})\n' \
 			+ 'func _execute(ctx): ctx.append_output("%s")\n'
@@ -1430,7 +1431,7 @@ func _test_console():
 	equal(console.prompt_label.text, "Formatted >", "prompt formatter replaces a fixed prompt")
 	console.reset_prompt()
 	equal(console.prompt_label.text, default_prompt, "reset restores the dynamic light-blue prompt")
-	var source_font = load("res://addons/addon_lib/gdsh/internal/source_font.tres")
+	var source_font = load("res://addons/addon_lib/gdsh/src/ui/assets/source_font.tres")
 	check(source_font is FontVariation, "console source font is a standalone FontVariation")
 	equal(source_font.get_font_name(), "JetBrains Mono", "console bundles the editor source font")
 	check(console.input.get_theme_font("font") == source_font, "console input uses the source font")
@@ -1919,7 +1920,7 @@ func _test_console_mixed_path_completion() -> void:
 	check(choices.has("method_target.gd"), "relative path completion preserves script names in binary exports")
 	ctx.cwd = "user://gdsh-missing-completion-directory"
 	check(complete("./", ctx).has("Beta"), "nodes remain when cwd is missing")
-	ctx.scopes["./"] = {"script": preload("res://addons/addon_lib/gdsh/builtins/echo/echo.gd")}
+	ctx.scopes["./"] = {"script": preload("res://addons/addon_lib/gdsh/src/core/builtins/echo/echo.gd")}
 	check(not complete("./", ctx).has("Beta"), "registered path commands retain their own completion")
 	console.free()
 	fixture.free()

@@ -15,6 +15,10 @@ class SerialRunnerProbe extends EditorConsoleSingleton:
 	func _ready() -> void:
 		pass
 
+class TerminalCleanupProbe extends SerialRunnerProbe:
+	func _remove_console_line_edit():
+		pass
+
 class DockedPromptProbe extends "res://addons/editor_console/src/container/editor_prompt.gd":
 	var log_control:Control
 	func _get_editor_log() -> Control:
@@ -35,7 +39,7 @@ class EditorRouterProbe extends "res://addons/editor_console/src/default_command
 			command.selected = selected
 			return command
 		if exact_override:
-			commands["script.Inner"] = {&"get_command": func(): return preload("res://addons/addon_lib/gdsh/builtins/echo/echo.gd").new()}
+			commands["script.Inner"] = {&"get_command": func(): return preload("res://addons/addon_lib/gdsh/src/core/builtins/echo/echo.gd").new()}
 		return commands
 
 class TempConfig extends EditorConsoleSingleton.UtilsLocal.Config:
@@ -125,6 +129,7 @@ func run_sync():
 
 ## Prompt path completion waits on the completion popup; headless only.
 func run_frames():
+	await _test_terminal(_ctx)
 	await _test_prompt_completion(_ctx)
 	await _test_tui_serial_lifecycle()
 	await _test_docked_tui()
@@ -513,3 +518,29 @@ func _test_global_registry(parent:Sh.Context):
 	global._ctx_obj = null
 	DirAccess.remove_absolute(project.file_path)
 	DirAccess.remove_absolute(user.file_path)
+
+
+func _test_terminal(ctx) -> void:
+	var terminal = preload("res://addons/editor_console/src/container/editor_terminal.gd").new()
+	_tree().root.add_child(terminal)
+	terminal.size = Vector2(500, 240)
+	terminal.set_context(Sh.Context.new_ctx("terminal", ctx))
+	for frame in 3: await _tree().process_frame
+	var result = await terminal.execute('echo "[color=red]rich[/color]"')
+	check(result.exit_code == 0 and terminal.output.get_parsed_text().contains("rich") and not terminal.output.get_parsed_text().contains("[color=red]rich[/color]\nConsole"), "editor terminal renders BBCode output")
+	check(terminal.output.has_focus() and not terminal.is_busy, "editor terminal starts focused and unlocks after execution")
+	check(Sh.Completion.new("editor_console termi", ctx).get_completions().has("terminal"), "editor_console terminal is routed and completes")
+	var unavailable = await terminal.execute("editor_console terminal")
+	check(unavailable.exit_code != 0 and unavailable.stderr.contains("active editor console"), "terminal window command reports unavailable editor host")
+	var owner = TerminalCleanupProbe.new()
+	var owned_window = Window.new()
+	_tree().root.add_child(owned_window)
+	owner._terminal_windows.append(weakref(owned_window))
+	owner.terminal_consoles.append(terminal)
+	owner._all_unregistered_callback()
+	await _tree().process_frame
+	check(not is_instance_valid(owned_window), "cleanup closes standalone terminal windows")
+	check(is_instance_valid(terminal) and not terminal.get_window().is_queued_for_deletion(), "cleanup leaves DockManager and editor terminal hosts alive")
+	owner.free()
+	terminal.queue_free()
+	for frame in 3: await _tree().process_frame

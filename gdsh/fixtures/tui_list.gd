@@ -1,4 +1,4 @@
-extends "res://addons/addon_lib/gdsh/tui_command.gd"
+extends "res://addons/addon_lib/gdsh/src/tui/tui_command.gd"
 ## Test-only list command; the public example lives in GDSh _export_ignore/docs/tui.md.
 var _selected:=0
 var _first:=0
