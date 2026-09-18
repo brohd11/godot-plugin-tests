@@ -64,6 +64,7 @@ func run_frames():
 	await _test_console()
 	await _test_console_path_completion()
 	await _test_console_node_completion()
+	await _test_console_mixed_path_completion()
 	await _test_async()
 	await _test_streaming_console()
 
@@ -623,7 +624,7 @@ func _test_working_node():
 		for path in ["Alpha/", "Alpha/I"]:
 			equal(complete(prefix + path, ctx).has("Internal"), prefix != "cn ", "internal completion defaults: " + prefix + path)
 		choices = complete(prefix + "/", ctx)
-		check(choices.has(str(root.name)), "absolute node completion starts at the tree root: " + prefix)
+		equal(choices.has(str(root.name)), prefix != "", "absolute root suggestions require an explicit node command: " + prefix)
 		check(not choices.has("Alpha"), "absolute slash does not list cwn children: " + prefix)
 		check(not complete(prefix + "Missing/", ctx).has("Alpha"), "missing parents do not fall back to cwn: " + prefix)
 	for flag in ["--internal", "-i"]:
@@ -641,7 +642,8 @@ func _test_working_node():
 	check(run_text("cn --help", Sh.Context.new_ctx("help", ctx)).stdout.contains("-i, --internal"), "cn help includes both internal flag forms")
 	var explicit_ctx = Sh.Context.new_ctx("explicit internal", ctx, true)
 	equal(run_text("cn Alpha/Internal", explicit_ctx).exit_code, 0, "explicit internal path works without a completion flag")
-	check(complete("Al", ctx).has("Alpha"), "partial bare node names complete from cwn")
+	for text in ["", "Al", "Alpha", "/", "/root"]:
+		check(not complete(text, ctx).has("Alpha"), "bare node suggestions wait for a slash after the first node: " + text)
 	check(complete("Alpha ", ctx).has("call"), "bare node target still completes subcommands")
 	check(complete("node Alpha ", ctx).has("call"), "explicit node target still completes subcommands")
 	check(complete("Alpha call ", ctx).has("--engine"), "bare node still routes member completion")
@@ -1714,7 +1716,8 @@ func _test_console_node_completion() -> void:
 	var console = Sh.Console.new(ctx)
 	_tree().root.add_child(console)
 	for prefix in ["cn ", "node ", ""]:
-		await _accept_console_choice(console.input, prefix + "Al", "Alpha", prefix + "Alpha/")
+		if not prefix.is_empty():
+			await _accept_console_choice(console.input, prefix + "Al", "Alpha", prefix + "Alpha/")
 		await _accept_console_choice(console.input, prefix + "Alpha/", "Beta", prefix + "Alpha/Beta/")
 		await _accept_console_choice(console.input, prefix + "Alpha/B", "Beta", prefix + "Alpha/Beta/")
 		var internal_prefix = "cn -i " if prefix == "cn " else prefix
@@ -1723,7 +1726,9 @@ func _test_console_node_completion() -> void:
 		await _accept_console_choice(console.input, prefix + "./Alpha/B", "Beta", prefix + "./Alpha/Beta/")
 		await _accept_console_choice(console.input, prefix + ctx.cwn + "/Alpha/B", "Beta", prefix + ctx.cwn + "/Alpha/Beta/")
 		await _accept_console_choice(console.input, prefix + "Alpha/", "..", prefix + "Alpha/../")
-		await _accept_console_choice(console.input, prefix + "/", "root", prefix + "/root/")
+		if not prefix.is_empty():
+			await _accept_console_choice(console.input, prefix + "/", "root", prefix + "/root/")
+		await _accept_console_choice(console.input, prefix + "/root/", str(fixture.name), prefix + str(fixture.get_path()) + "/")
 		await _accept_console_choice(console.input, prefix + '"Alpha/With', "With Space", prefix + '"Alpha/With Space/"')
 		await _accept_console_choice(console.input, prefix + '"Alpha/With Space/"', "Deep Space", prefix + '"Alpha/With Space/Deep Space/"')
 		await _accept_console_choice(console.input, "echo before; " + prefix + "Alpha/B", "Beta", "echo before; " + prefix + "Alpha/Beta/", " ; echo after")
@@ -1735,6 +1740,75 @@ func _test_console_node_completion() -> void:
 	check(not console.input._popup._choices.has("Internal"), "cn popup hides internal children by default")
 	console.free()
 	fixture.free()
+
+
+func _test_console_mixed_path_completion() -> void:
+	var fixture_path = "user://gdsh-mixed-completion-%s" % Time.get_ticks_usec()
+	equal(DirAccess.make_dir_recursive_absolute(fixture_path + "/Alpha"), OK, "create mixed path fixture")
+	for name in ["file.gdsh", "Shared", "With Space.gdsh", "Alpha/child.txt"]:
+		var file = FileAccess.open(fixture_path.path_join(name), FileAccess.WRITE)
+		file.store_string("echo fixture")
+		file.close()
+	var fixture = Node.new()
+	fixture.name = "GDShMixedCompletion"
+	_tree().root.add_child(fixture)
+	for name in ["Alpha", "Shared", "NodeOnly"]:
+		var child = Node.new()
+		child.name = name
+		fixture.add_child(child)
+	var beta = Node.new()
+	beta.name = "Beta"
+	fixture.get_node("Alpha").add_child(beta)
+	var ctx = session()
+	ctx.cwd = fixture_path
+	ctx.cwn = str(fixture.get_path())
+	var choices = complete("./", ctx)
+	var names = choices.keys()
+	var separator = -1
+	for i in names.size():
+		if Sh.Options.Keys.get_seperator(str(names[i])) != null:
+			separator = i
+	check(separator >= 0, "mixed completion has a node separator")
+	check(names.find("file.gdsh") >= 0 and names.find("file.gdsh") < separator, "files precede the node separator")
+	check(names.find("Alpha") >= 0 and names.find("Alpha") < separator, "directories precede the node separator")
+	check(names.find("NodeOnly") > separator, "nodes follow the separator")
+	check(names.find("Alpha [node]") > separator and names.find("Shared [node]") > separator, "same-name files and nodes both survive")
+	check(not complete("node ./", ctx).has("file.gdsh"), "explicit node completion excludes files")
+	check(complete("cn ", ctx).has("NodeOnly"), "cn offers nodes immediately")
+	check(complete("node ", ctx).has("NodeOnly"), "node offers nodes immediately")
+	for text in ["", "No", "NodeOnly"]:
+		check(not complete(text, ctx).has("NodeOnly"), "command position waits for a path prefix: " + text)
+	var console = Sh.Console.new(ctx)
+	_tree().root.add_child(console)
+	console.input.text = "./"
+	console.input.set_caret_column(2)
+	await console.input.request_completion(true)
+	var popup = console.input._popup
+	check(popup._choices.find("file.gdsh") < popup._choices.find("NodeOnly"), "popup preserves files before nodes")
+	await _accept_console_choice(console.input, "./", "file.gdsh", "./file.gdsh ")
+	await _accept_console_choice(console.input, "./", "Shared", "./Shared ")
+	await _accept_console_choice(console.input, "./", "Shared [node]", "./Shared/")
+	await _accept_console_choice(console.input, "./Al", "Alpha", "./Alpha/")
+	await _accept_console_choice(console.input, "./Al", "Alpha [node]", "./Alpha/")
+	await _accept_console_choice(console.input, "./Alpha/", "child.txt", "./Alpha/child.txt ")
+	await _accept_console_choice(console.input, "./Alpha/", "Beta", "./Alpha/Beta/")
+	await _accept_console_choice(console.input, './With', "With Space.gdsh", '"./With Space.gdsh" ')
+	await _accept_console_choice(console.input, "echo before; ./fi", "file.gdsh", "echo before; ./file.gdsh ", "; echo after")
+	ctx.cwd = fixture_path + "/Alpha"
+	ctx.cwn = str(fixture.get_node("Alpha").get_path())
+	await _accept_console_choice(console.input, "../", "file.gdsh", "../file.gdsh ")
+	await _accept_console_choice(console.input, "../", "NodeOnly", "../NodeOnly/")
+	ctx.cwd = FIXTURES
+	choices = complete("./", ctx)
+	check(choices.has("method_target.gd"), "relative path completion preserves script names in binary exports")
+	ctx.cwd = "user://gdsh-missing-completion-directory"
+	check(complete("./", ctx).has("Beta"), "nodes remain when cwd is missing")
+	ctx.scopes["./"] = {"script": preload("res://addons/addon_lib/gdsh/builtins/echo/echo.gd")}
+	check(not complete("./", ctx).has("Beta"), "registered path commands retain their own completion")
+	console.free()
+	fixture.free()
+	for path in ["file.gdsh", "Shared", "With Space.gdsh", "Alpha/child.txt", "Alpha", ""]:
+		equal(DirAccess.remove_absolute(fixture_path.path_join(path)), OK, "remove mixed completion fixture")
 
 
 func _test_console_input_consumption(console, transcript:RichTextLabel) -> void:

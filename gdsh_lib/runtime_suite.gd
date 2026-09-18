@@ -146,6 +146,21 @@ func _test_str():
 func _test_paths():
 	var ctx = session()
 	ctx.cwd = FIXTURES
+	var fixture = Node.new()
+	fixture.name = "GDShRealpathCompletion"
+	_tree().root.add_child(fixture)
+	var child = Node.new()
+	child.name = "NodeOnly"
+	fixture.add_child(child)
+	ctx.cwn = str(fixture.get_path())
+	var choices = Sh.Completion.new("realpath ./", ctx).get_completions()
+	check(choices.has("sample.txt") and choices.has("nested"), "realpath completes files and directories")
+	check(not choices.has("NodeOnly"), "realpath completion excludes nodes")
+	choices = Sh.Completion.new('realpath "./nested/', ctx).get_completions()
+	check(choices.has("inner.txt"), "realpath completes quoted directory paths")
+	if choices.has("inner.txt"):
+		equal(choices["inner.txt"][Sh.Options.Keys.METADATA][Sh.Options.Keys.INSERT], '"./nested/inner.txt"', "realpath preserves quoting")
+	fixture.free()
 	var listing = out("ls", "", ctx).split("\n")
 	check(listing.has("sample.txt") and listing.has("nested/"), "ls lists files and directories: " + str(listing))
 	check(out("ls --recursive", "", ctx).split("\n").has("nested/inner.txt"), "ls --recursive walks res:// by default")
