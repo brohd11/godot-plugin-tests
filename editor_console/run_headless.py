@@ -19,6 +19,11 @@ def main():
         for directory in ['addons/addon_lib', 'addons/editor_console', 'addons/zyx_popup_wrapper', 'tests/editor_console']:
             shutil.copytree(repo / directory, project / directory,
                             ignore=shutil.ignore_patterns('.git', 'export_ignore', '__pycache__'))
+        # Shared test-only TUI; it is deliberately absent from GDSh builtins.
+        fixture_dir = Path('tests/gdsh/fixtures')
+        (project / fixture_dir).mkdir(parents=True, exist_ok=True)
+        for name in ['tui_list.gd', 'tui_list.gd.uid']:
+            shutil.copy2(repo / fixture_dir / name, project / fixture_dir / name)
         (project / 'project.godot').write_text('''config_version=5
 [application]
 config/name="Editor Console integration tests"

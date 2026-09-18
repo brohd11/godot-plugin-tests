@@ -68,6 +68,9 @@ func run_frames():
 	await _test_console_mixed_path_completion()
 	await _test_async()
 	await _test_streaming_console()
+	if not Engine.is_editor_hint():
+		await preload("res://tests/gdsh/tui_tests.gd").new().run(self)
+		await preload("res://tests/gdsh/tui_program_tests.gd").new().run(self)
 
 
 func _run_async(text:String, ctx:Sh.Context) -> Sh.Context:
@@ -422,7 +425,9 @@ func _test_loading():
 	custom.scopes[script.get_command_name()] = {"script": script}
 	equal(run_text("probe", custom).stdout.strip_edges(), "default:false::", "manual registration")
 	var builtins = Sh.Load.load_builtins()
-	equal(builtins.size(), 25, "builtin manifest includes namespaces")
+	check(not builtins.has("tui_demo"), "documentation demo is not a builtin")
+	check(not complete("builtins ", Sh.Context.new()).has("tui_demo"), "documentation demo is absent from builtin completion")
+	check(run_text("tui_demo").stderr.contains("Unrecognized command"), "documentation demo is not executable by default")
 	check(builtins.has("help") and builtins.has("clear"), "help and clear are builtins")
 	check(builtins.has("builtins") and builtins.has("hidden"), "builtins and hidden namespaces are registered")
 	for name in ["os", "global", "cat", "pwd"]:

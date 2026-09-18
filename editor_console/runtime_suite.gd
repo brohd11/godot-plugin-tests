@@ -1,11 +1,24 @@
 extends RefCounted
 ## Editor Console runtime checks, driven by runtime_test.gd (headless and editor console `test`).
 const Sh = preload("res://addons/addon_lib/gdsh/_ns/gd_sh.gd")
+const TUIList = preload("res://tests/gdsh/fixtures/tui_list.gd")
 const Adapter = preload("res://addons/editor_console/src/utils/os_adapter.gd")
 var checks:int = 0
 var failures:int = 0
 var report:Array[String] = []
 var _ctx:Sh.Context
+
+# Exercise the real serial runner without initializing editor-only settings/plugins.
+class SerialRunnerProbe extends EditorConsoleSingleton:
+	func _init(_plugin:EditorPlugin=null) -> void:
+		pass
+	func _ready() -> void:
+		pass
+
+class DockedPromptProbe extends "res://addons/editor_console/src/container/editor_prompt.gd":
+	var log_control:Control
+	func _get_editor_log() -> Control:
+		return log_control if is_instance_valid(log_control) else null
 
 class CurrentScriptProbe extends "res://addons/editor_console/src/default_commands/editor/script/script.gd":
 	var selected:Script
@@ -61,6 +74,8 @@ func run_sync():
 	var defaults = load("res://addons/editor_console/src/default_commands/default.gd")
 	var ctx = Sh.Context.new()
 	ctx.scopes.merge(defaults.register_scopes())
+	check(not ctx.scopes.has("plugin") and Sh.Completion.new("editor plug", ctx).get_completions().has("plugin"), "plugin TUI lives under editor plugin")
+	check(Sh.Completion.new("editor plugin ", ctx).get_completions().has("enable"), "existing editor plugin subcommands remain available")
 	ctx.scopes_hidden.merge(defaults.register_hidden_scopes(), true)
 	ctx.collect_raw_commands()
 	check("os" in ctx.raw_commands, "os declares raw arguments")
@@ -111,6 +126,109 @@ func run_sync():
 ## Prompt path completion waits on the completion popup; headless only.
 func run_frames():
 	await _test_prompt_completion(_ctx)
+	await _test_tui_serial_lifecycle()
+	await _test_docked_tui()
+	await preload("res://tests/editor_console/plugin_tui_tests.gd").new().run(self)
+
+
+func _test_tui_serial_lifecycle() -> void:
+	var runner = SerialRunnerProbe.new()
+	var prompt = load("res://addons/editor_console/src/container/editor_prompt.gd").new()
+	var editor_binding = weakref(runner)
+	prompt.context.scopes["test_tui_list"] = {"script": TUIList}
+	prompt.context.host_data["console"] = editor_binding
+	prompt.create_output()
+	_tree().root.add_child(prompt)
+	prompt.size = Vector2(500, 300)
+	prompt.execution_handler = func(text, ctx):
+		await runner._run_serialized(func(): return await Sh.Execute.execute_command_multiline(text, ctx))
+	prompt.execute("test_tui_list")
+	for frame in 3: await _tree().process_frame
+	check(prompt.active_tui != null and runner._serial_running, "editor TUI owns the serialized command slot")
+	check(prompt.context.host_data.console == editor_binding, "TUI service preserves the editor console binding")
+	var results:Array = []
+	_queued_after_tui(runner, results)
+	check(results.is_empty(), "editor work queues behind the TUI")
+	prompt.queue_free()
+	for frame in 5: await _tree().process_frame
+	check(results == ["after"] and not runner._serial_running, "closing the TUI host releases the editor serial queue")
+	runner.free()
+
+
+func _queued_after_tui(runner, results:Array) -> void:
+	await runner._run_serialized(func(): results.append("after"))
+
+func _tui_frames() -> void:
+	for frame in 5: await _tree().process_frame
+
+func _test_docked_tui() -> void:
+	# EditorLog is a MarginContainer in 4.6; keep the prompt inside the body we hide.
+	var log_control = MarginContainer.new()
+	log_control.custom_minimum_size = Vector2(0, 180)
+	_tree().root.add_child(log_control)
+	log_control.size = Vector2(600, 320)
+	var body = VBoxContainer.new()
+	log_control.add_child(body)
+	var transcript = RichTextLabel.new()
+	transcript.text = "existing log"
+	transcript.custom_minimum_size.y = 200
+	transcript.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(transcript)
+	var initially_hidden = Control.new()
+	initially_hidden.hide()
+	log_control.add_child(initially_hidden)
+	var prompt = DockedPromptProbe.new()
+	prompt.context.scopes["test_tui_list"] = {"script": TUIList}
+	prompt.log_control = log_control
+	body.add_child(prompt)
+	var runner = SerialRunnerProbe.new()
+	prompt.execution_handler = func(text, ctx):
+		await runner._run_serialized(func(): return await Sh.Execute.execute_command_multiline(text, ctx))
+	await _tui_frames()
+	var minimum_before = log_control.get_combined_minimum_size()
+	var captured = await prompt.execute("echo $(test_tui_list)")
+	check(captured.stderr.contains("stdout is captured") and body.visible, "docked TUI rejects captured output before changing visibility")
+	prompt.execute("test_tui_list")
+	await _tui_frames()
+	var session = prompt.active_tui
+	check(session != null and session.get_parent() == log_control and not body.visible and not initially_hidden.visible,
+		"docked TUI takes over the whole editor log and hides the prompt ancestor")
+	if session == null:
+		log_control.queue_free()
+		runner.free()
+		return
+	check(session.display.has_focus() and session.display.size.y > 0 and prompt.is_busy, "docked TUI receives focus and layout while its prompt is hidden")
+	check(log_control.get_combined_minimum_size().y >= minimum_before.y, "docked TUI retains the content minimum so the bottom panel cannot collapse to its footer")
+	transcript.append_text("\nbackground log")
+	session.close(0)
+	await _tui_frames()
+	check(body.visible and not initially_hidden.visible and prompt.input.has_focus() and not prompt.is_busy,
+		"docked TUI restores original visibility and prompt focus")
+	check(transcript.get_parsed_text() == "existing log\nbackground log" and log_control.custom_minimum_size == Vector2(0, 180),
+		"docked TUI preserves transcript updates and existing layout settings")
+	prompt.execute("test_tui_list")
+	await _tui_frames()
+	prompt.active_tui.queue_free()
+	await _tui_frames()
+	check(body.visible and not prompt.is_busy and prompt.active_tui == null, "external session removal restores the dock and resolves execution")
+	prompt.execute("test_tui_list")
+	await _tui_frames()
+	var results:Array = []
+	_queued_after_tui(runner, results)
+	prompt.queue_free()
+	await _tui_frames()
+	check(body.visible and not initially_hidden.visible and results == ["after"] and not runner._serial_running,
+		"prompt teardown restores its external host and releases queued editor work")
+	log_control.queue_free()
+	runner.free()
+	await _tui_frames()
+	var missing = DockedPromptProbe.new()
+	missing.context.scopes["test_tui_list"] = {"script": TUIList}
+	_tree().root.add_child(missing)
+	var result = await missing.execute("test_tui_list")
+	check(result.stderr.contains("interactive console view") and not missing.is_busy, "missing editor log rejects TUI acquisition cleanly")
+	missing.queue_free()
+	await _tui_frames()
 
 func finish() -> Array[String]:
 	report.append("Editor Console: %d checks, %d failures" % [checks, failures])
