@@ -15,12 +15,16 @@ def main():
     parser.add_argument('--keep', action='store_true', help='Keep the temporary project for inspection')
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[2]
-    module = Path('addons/addon_lib/gdsh')
+    # util_r is referenced through its `UtilR` class_name, which the dependency walk below cannot
+    # see, so it is seeded explicitly rather than discovered.
+    modules = [Path('addons/addon_lib/gdsh'), Path('addons/addon_lib/util_r')]
     project = Path(tempfile.mkdtemp(prefix='gdsh-runtime-'))
     print(f'Isolated project: {project}', flush=True)
     try:
         uid_paths = {p.read_text().strip(): p.with_suffix('') for p in (repo / 'addons').rglob('*.uid')}
-        pending = list((repo / module).rglob('*.gd')) + list((repo / 'tests/gdsh').rglob('*.gd'))
+        pending = list((repo / 'tests/gdsh').rglob('*.gd'))
+        for m in modules:
+            pending += list((repo / m).rglob('*.gd'))
         visited = set()
         while pending:
             source = pending.pop()
@@ -28,7 +32,7 @@ def main():
                 continue
             visited.add(source)
             rel = source.relative_to(repo)
-            if not (rel.is_relative_to(module) or rel.is_relative_to('tests/gdsh')):
+            if not (rel.is_relative_to('tests/gdsh') or any(rel.is_relative_to(m) for m in modules)):
                 raise RuntimeError(f'External GDSh dependency: {rel}')
             dest = project / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -88,7 +92,7 @@ binary_format/architecture="x86_64"
             print(('PASS: project export' if '--export-pack' in command else 'PASS: project import') if quiet else re.sub(r'\x1b\[[0-9;]*m', '', result.stdout), flush=True)
             if result.returncode or 'SCRIPT ERROR:' in result.stdout or 'Parse Error:' in result.stdout:
                 return 1
-        print(f'PASS: runtime isolation; {len(visited)} resources, only GDSh and its test fixtures')
+        print(f'PASS: runtime isolation; {len(visited)} resources, only GDSh, util_r and its test fixtures')
         return 0
     finally:
         if not args.keep:

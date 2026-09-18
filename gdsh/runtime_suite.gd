@@ -3,6 +3,7 @@ extends RefCounted
 
 const Sh = preload("res://addons/addon_lib/gdsh/_ns/gd_sh.gd")
 const Utils = preload("res://addons/addon_lib/gdsh/internal/utils.gd")
+const NodePaths = preload("res://addons/addon_lib/gdsh/internal/node_paths.gd")
 const FIXTURES = "res://tests/gdsh/fixtures/"
 const COMMANDS = FIXTURES + "commands/"
 const OVERRIDES = FIXTURES + "overrides/"
@@ -41,6 +42,9 @@ func run_sync():
 	_test_value_conversion()
 	_test_method_call()
 	_test_files()
+	_test_working_node()
+	_test_bare_resolution()
+	_test_script_target()
 	_test_completion()
 	_test_structured_completion()
 	_test_hidden_scopes()
@@ -411,7 +415,7 @@ func _test_loading():
 	custom.scopes[script.get_command_name()] = {"script": script}
 	equal(run_text("probe", custom).stdout.strip_edges(), "default:false::", "manual registration")
 	var builtins = Sh.Load.load_builtins()
-	equal(builtins.size(), 20, "builtin manifest includes namespaces")
+	equal(builtins.size(), 24, "builtin manifest includes namespaces")
 	check(builtins.has("help") and builtins.has("clear"), "help and clear are builtins")
 	check(builtins.has("builtins") and builtins.has("hidden"), "builtins and hidden namespaces are registered")
 	for name in ["os", "global", "cat", "pwd"]:
@@ -429,13 +433,13 @@ func _test_builtins():
 	for text in ["", "bui"]:
 		var choices = complete(text, ctx)
 		check(not choices.has("builtins") and not choices.has("echo"), "builtins omitted from root completion: " + text)
-	var public_names = ["break", "continue", "return", "exit", "shift", "true", "false", "[", "expr", "echo", "source", "cd", "help", "hidden", "clear", "new_ctx", "undoredo"]
+	var public_names = ["break", "continue", "return", "exit", "shift", "true", "false", "[", "expr", "echo", "source", "cd", "cn", "node", "gdsh", "script", "help", "hidden", "clear", "new_ctx", "undoredo"]
 	var choices = complete("builtins ", ctx)
 	var children = ctx.get_scope("builtins").script.new().get_commands()
 	equal(children.size(), public_names.size(), "parent discovers only public builtins")
 	for name in public_names:
 		check(children.has(name) and choices.has(name), "builtin child routing and completion: " + name)
-	for name in ["__function__", "__run_script__"]:
+	for name in ["__function__", "__ambiguous__"]:
 		check(ctx.scopes_hidden.has(name) and not choices.has(name), "internal builtin remains registered but is not suggested: " + name)
 	check(complete("builtins ec", ctx).has("echo"), "partial builtin child completion")
 	ctx.cwd = COMMANDS
@@ -446,7 +450,7 @@ func _test_builtins():
 	check(listing.stdout.contains("Subcommands:"), "bare builtins lists children")
 	for name in public_names:
 		check((listing.stdout + "\n").contains("\n  " + name + "\n"), "builtin listing includes: " + name)
-	check(not listing.stdout.contains("__function__") and not listing.stdout.contains("__run_script__"), "builtin help omits internals")
+	check(not listing.stdout.contains("__function__") and not listing.stdout.contains("__ambiguous__"), "builtin help omits internals")
 	equal(run_text("builtins --help").stdout, listing.stdout, "explicit parent help matches listing")
 	equal(run_text("builtins echo --help").stdout, run_text("echo --help").stdout, "namespaced child help")
 	check(run_text("help").stdout.contains("\n  builtins\n"), "help lists hidden parent")
@@ -478,7 +482,7 @@ func _test_hidden():
 	check(ctx.scopes_hidden.has("hidden") and ctx.scopes.is_empty(), "hidden parent is a hidden builtin")
 	var parent = ctx.get_scope("hidden").script.new()
 	parent._initialize(ctx)
-	equal(parent.get_commands().keys(), ["builtins"], "hidden lists only discoverable hidden scopes by default")
+	equal(parent.get_commands().keys(), ["builtins", "gdsh", "node", "script"], "hidden lists only discoverable hidden scopes by default")
 	var choices = complete("hidden ", ctx)
 	check(choices.has("builtins"), "hidden completes discoverable namespaces")
 	for name in ["echo", "cd", "help", "clear", "__function__", "hidden"]:
@@ -530,6 +534,7 @@ func _test_files():
 	_write(temp.path_join("source.gdsh"), "#!gdsh\nX = sourced; echo sourced")
 	_write(temp.path_join("args.gdsh"), "#!gdsh\nX = child; echo $1 $#; exit 6")
 	_write(temp.path_join("not_gdsh.txt"), "echo no")
+	_write(temp.path_join("no_tag.gdsh"), "echo untagged")
 	var ctx = session()
 	ctx.cwd = ProjectSettings.globalize_path(temp)
 	run_text("source source.gdsh; echo $X", ctx)
@@ -545,10 +550,161 @@ func _test_files():
 	equal(ctx.exit_code, 2, "failed cd status")
 	check(not _sync("source_file", [temp.path_join("missing.gdsh")]).stderr.is_empty(), "missing source diagnostic")
 	equal(_sync("source_file", [temp.path_join("not_gdsh.txt")]).exit_code, 1, "non-gdsh rejected")
-	for name in ["source.gdsh", "args.gdsh", "not_gdsh.txt"]:
+	# The extension is the only gate now: source_file still demands #!gdsh, the gdsh command does not.
+	# Built from temp, not ctx.cwd: the cd checks above have already moved cwd into child/.
+	equal(run_text('"' + ProjectSettings.globalize_path(temp).path_join("no_tag.gdsh") + '"',
+			Sh.Context.new_ctx("untagged", ctx)).stdout.strip_edges(),
+			"untagged", "a .gdsh script runs without a #!gdsh tag")
+	for name in ["source.gdsh", "args.gdsh", "not_gdsh.txt", "no_tag.gdsh"]:
 		DirAccess.remove_absolute(temp.path_join(name))
 	DirAccess.remove_absolute(temp.path_join("child"))
 	DirAccess.remove_absolute(temp)
+
+## The working node: cwn is to node paths what cwd is to file paths, and cn is its cd.
+func _test_working_node():
+	var root = _tree().root
+	equal(Sh.Context.new().cwn, "/root", "default working node")
+
+	var fixture = Node.new()
+	fixture.name = "GDShCwnFixture"
+	var alpha = Node.new()
+	alpha.name = "Alpha"
+	var beta = Node.new()
+	beta.name = "Beta"
+	root.add_child(fixture)
+	fixture.add_child(alpha)
+	alpha.add_child(beta)
+	var base = "/root/GDShCwnFixture"
+
+	equal(NodePaths.path_of(alpha), base + "/Alpha", "absolute path of a node")
+	equal(NodePaths.resolve(base + "/Alpha"), alpha, "absolute node path resolves")
+	equal(NodePaths.resolve("Alpha", base), alpha, "relative node path resolves from cwn")
+	equal(NodePaths.resolve("Alpha/Beta", base), beta, "nested relative node path resolves")
+	equal(NodePaths.resolve("..", base + "/Alpha"), fixture, "'..' resolves to the parent")
+	check(NodePaths.resolve("Missing", base) == null, "a missing node resolves to null")
+	# res:// must stay a script target; a node lookup would shadow it.
+	check(NodePaths.resolve("res://addons/addon_lib/gdsh/load.gd", base) == null, "resource paths are not node paths")
+	equal(NodePaths.cwn_node(base + "/Gone"), root, "an unresolvable cwn falls back to the tree root")
+
+	var ctx = session()
+	run_text("cn " + base, ctx)
+	equal(ctx.cwn, base, "cn propagates an absolute node path")
+	run_text("cn Alpha", ctx)
+	equal(ctx.cwn, base + "/Alpha", "relative cn propagates")
+	run_text("cn ..", ctx)
+	equal(ctx.cwn, base, "cn .. walks up")
+	var before = ctx.cwn
+	var failed = run_text("cn Missing", Sh.Context.new_ctx("cn", ctx))
+	equal(ctx.cwn, before, "failed cn preserves cwn")
+	equal(failed.exit_code, 2, "failed cn status")
+
+	equal(Sh.Context.new_ctx("child", ctx).cwn, base, "new_ctx inherits cwn")
+	equal(Sh.Context.new_ctx("subshell", ctx, true).cwn, base, "a subshell inherits cwn")
+	# Completion builds its own context; offering children proves cwn was carried into it.
+	var choices = complete("cn ", ctx)
+	check(choices.has("Alpha"), "cn completes child nodes under cwn")
+	check(choices.has(".."), "cn completes the parent")
+
+	root.remove_child(fixture)
+	fixture.free()
+
+## Bare targets in command position: core classifies the token and routes it to the handler,
+## so a node path is a command without any host resolver installed.
+func _test_bare_resolution():
+	var root = _tree().root
+	var fixture = Node.new()
+	fixture.name = "GDShBareFixture"
+	var child = Node.new()
+	child.name = "Child"
+	root.add_child(fixture)
+	fixture.add_child(child)
+	var base = "/root/GDShBareFixture"
+	var ctx = session()
+
+	equal(run_text(base, Sh.Context.new_ctx("bare", ctx)).stdout.strip_edges(), base,
+			"a bare absolute node path prints its path")
+	equal(run_text(base + "/Child", Sh.Context.new_ctx("bare", ctx)).stdout.strip_edges(), base + "/Child",
+			"a bare nested node path resolves")
+	equal(run_text("node " + base, Sh.Context.new_ctx("explicit", ctx)).stdout.strip_edges(), base,
+			"the explicit node command resolves the same path")
+
+	ctx.cwn = base
+	equal(run_text("Child", Sh.Context.new_ctx("relative", ctx)).stdout.strip_edges(), base + "/Child",
+			"a bare relative node path resolves from cwn")
+
+	var missing = run_text("node Missing", Sh.Context.new_ctx("missing", ctx))
+	check(missing.exit_code != 0 and missing.stderr.contains("Node not found"), "an explicit missing node reports an error")
+	check(not ctx.has_scope("Missing"), "an unresolvable bare name does not resolve")
+
+	# Extensions classify before any tree lookup, so a resource path is never a node.
+	check(ctx.has_scope("res://addons/addon_lib/gdsh/load.gd"), "a .gd path routes to the script command, not a node")
+	# Classification is by extension, so this resolves before the file is known to exist.
+	check(ctx.has_scope("boot.gdsh"), "a .gdsh path routes to the gdsh command, not a node")
+
+	# Registered scopes are checked before bare resolution, so a node cannot shadow a command.
+	var shadow = Node.new()
+	shadow.name = "echo"
+	fixture.add_child(shadow)
+	equal(run_text("echo hi", Sh.Context.new_ctx("shadow", ctx)).stdout.strip_edges(), "hi",
+			"a registered command is not shadowed by a node of the same name")
+
+	# GDSh is a global class here, so a node with that name is genuinely ambiguous.
+	var clash = Node.new()
+	clash.name = "GDSh"
+	fixture.add_child(clash)
+	var ambiguous = run_text("GDSh", Sh.Context.new_ctx("ambiguous", ctx))
+	check(ambiguous.exit_code != 0 and ambiguous.stderr.contains("both a global class and a node"),
+			"a name matching both a class and a node reports the clash")
+
+	root.remove_child(fixture)
+	fixture.free()
+
+## The script target: a global class name, a res:// path, or a path relative to cwd, with the
+## subcommands routed at whatever resolved.
+func _test_script_target():
+	var target = FIXTURES + "method_target.gd"
+	var ctx = session()
+
+	# A .gd path classifies as a script before any tree lookup.
+	check(ctx.has_scope(target), "a res:// script path resolves")
+	equal(run_text(target + " get_path", Sh.Context.new_ctx("path", ctx)).stdout.strip_edges(), target,
+			"get_path prints the resolved script's resource path")
+	equal(run_text("script " + target + " get_path", Sh.Context.new_ctx("explicit", ctx)).stdout.strip_edges(), target,
+			"the explicit script command resolves the same target")
+	equal(run_text("script --path=" + target + " get_path", Sh.Context.new_ctx("flag", ctx)).stdout.strip_edges(), target,
+			"--path= targets a script by path")
+
+	# Relative to cwd, which the fixtures directory makes straightforward.
+	var relative = Sh.Context.new_ctx("relative", ctx)
+	relative.cwd = FIXTURES
+	equal(run_text("method_target.gd get_path", relative).stdout.strip_edges(), target,
+			"a relative script path resolves from cwd")
+
+	# call reaches static methods and converts arguments through GDSh.Utils.Method.
+	var called = run_text(target + " call add -- 3 4", Sh.Context.new_ctx("call", ctx))
+	check(called.exit_code == 0 and called.stdout.strip_edges().ends_with("7"),
+			"call runs a static method and converts args: " + called.stdout + called.stderr)
+	var defaulted = run_text(target + " call add -- 3", Sh.Context.new_ctx("default", ctx))
+	check(defaulted.exit_code == 0 and defaulted.stdout.strip_edges().ends_with("5"),
+			"call uses a declared default: " + defaulted.stdout + defaulted.stderr)
+	# greet is an instance method, so static-only filtering must reject it.
+	var instance_method = run_text(target + " call greet -- world", Sh.Context.new_ctx("instance", ctx))
+	check(instance_method.exit_code != 0, "call rejects an instance method on a script target")
+
+	var listed = run_text(target + " list --methods", Sh.Context.new_ctx("list", ctx))
+	check(listed.exit_code == 0 and listed.stdout.contains("add"), "list reports the script's methods: " + listed.stderr)
+	var args_out = run_text(target + " args add", Sh.Context.new_ctx("args", ctx))
+	check(args_out.exit_code == 0 and args_out.stdout.contains("a:"), "args lists a method's arguments: " + args_out.stderr)
+	check(run_text(target + " --text", Sh.Context.new_ctx("text", ctx)).stdout.contains("static func add"),
+			"--text writes the script source")
+
+	# A global class name resolves through the class table rather than a path.
+	check(ctx.has_scope("GDSh"), "a bare global class name resolves to the script command")
+	# Nothing registered and not a class, path or node: still unrecognized.
+	check(not ctx.has_scope("NotAClassOrNode"), "an unknown bare name still does not resolve")
+	var missing = run_text("script res://addons/addon_lib/gdsh/missing_script.gd get_path",
+			Sh.Context.new_ctx("missing", ctx))
+	check(missing.exit_code != 0, "an unresolvable script target reports an error")
 
 func _test_clear():
 	var ctx = session()
@@ -980,7 +1136,7 @@ func _test_hidden_scopes():
 	var initial_help = run_text("help", ctx).stdout.strip_edges()
 	check(initial_help.begins_with("Commands:\n  (none)\n\nHidden commands:"), "help separates empty visible and hidden scopes")
 	check(initial_help.contains("\n  builtins") and initial_help.contains("\n  hidden") and not initial_help.contains("\n  help"), "help lists hidden namespaces and omits non-discoverable builtins")
-	check(not initial_help.contains("__function__") and not initial_help.contains("__run_script__"), "help excludes reserved internal scopes")
+	check(not initial_help.contains("__function__") and not initial_help.contains("__ambiguous__"), "help excludes reserved internal scopes")
 	var hidden_lines = initial_help.get_slice("Hidden commands:\n", 1).split("\n", false)
 	var sorted_hidden = Array(hidden_lines)
 	sorted_hidden.sort()

@@ -92,10 +92,12 @@ func _result(text:String, ctx:Sh.Context) -> Sh.Context:
 
 func _test_editor_behavior(ctx:Sh.Context):
 	EditorConsoleSingleton.UtilsRemote.UClassDetail._build_global_class_registry()
+	Sh.Utils.clear_global_class_cache()
 	ctx.scope_resolver = EditorConsoleSingleton._resolve_editor_scope
-	for text in ["EditorConsoleMigrationFixture call greeting -- world", "global EditorConsoleMigrationFixture call greeting -- world", "EditorConsoleMigrationFixture.Inner call answer"]:
+	# `global` is gone: GDSh core resolves a bare global class name to the core `script` command.
+	for text in ["EditorConsoleMigrationFixture call greeting -- world", "script EditorConsoleMigrationFixture call greeting -- world", "EditorConsoleMigrationFixture.Inner call answer"]:
 		var result = _result(text, ctx)
-		check(result.exit_code == 0 and ("hello world" in result.stdout or "42" in result.stdout), "global call: " + text + ": " + result.stderr)
+		check(result.exit_code == 0 and ("hello world" in result.stdout or "42" in result.stdout), "script call: " + text + ": " + result.stderr)
 	check(Sh.Completion.new("EditorConsoleMigrationFixture call ", ctx).get_completions().has("greeting"), "bare global method completion")
 	check(Sh.Completion.new("EditorConsoleMigrationFixture.Inner call ", ctx).get_completions().has("answer"), "member access completion")
 	var converted_call = _result("EditorConsoleMigrationFixture call add -- 3", ctx)
