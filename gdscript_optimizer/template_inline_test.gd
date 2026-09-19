@@ -9,7 +9,7 @@ static func run_tests() -> Dictionary:
 		sources[BASE + name + ".gd"] = BASE + name + ".gd"
 	var optimizer = Optimizer.new()
 	var prepared = optimizer.prepare(sources, Optimizer.Context.new(), [Optimizer.InlinePass])
-	if not prepared.errors.is_empty() or not prepared.warnings.is_empty():
+	if not prepared.errors.is_empty() or prepared.warnings.any(func(warning): return not warning.contains("require aggressive or substitute")):
 		failures.append("prepare: " + str(prepared))
 	var path := BASE + "template_caller.gd"
 	var result = optimizer.apply(path, Array(FileAccess.get_file_as_string(path).split("\n")))
@@ -18,8 +18,8 @@ static func run_tests() -> Dictionary:
 	script.source_code = source
 	if script.reload() != OK:
 		return {"result": 1, "output": ["templates did not compile", source]}
-	if result.stats.inline_calls != 19:
-		failures.append("expected 19 sites: " + str(result.stats) + str(result.warnings))
+	if result.stats.inline_calls != 9:
+		failures.append("expected 9 value-only sites: " + str(result.stats) + str(result.warnings))
 	var original = load(path)
 	for method:String in ["lookup", "mixed", "reference_rebind", "containers", "defaults", "supplied", "ordering", "lifetime", "getter", "reference_getter", "converted", "vector_default", "mutable_supplied", "constant_default", "reference_count", "dictionary_keys"]:
 		if script.call(method) != original.call(method):

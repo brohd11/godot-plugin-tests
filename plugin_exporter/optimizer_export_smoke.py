@@ -98,10 +98,10 @@ func _init() -> void:
             assert stats.get("inline_calls", 0) == 0 and "Helpers.affine(number)" in rendered
         else:
             assert "if Helpers.is_gdscript_path(path):" not in rendered
-            assert stats["inline_calls"] >= 4 and stats["inline_expanded_calls"] >= 2, stats
-            assert stats["inline_early_return_calls"] >= 1, stats
-            assert "Helpers.early_value(value)" in rendered and "Helpers.early_effect(events, value)" not in rendered
-            assert "Helpers.affine(number)" not in rendered and "Helpers.struct_score(" not in rendered
+            assert stats["inline_calls"] >= 4 and stats["inline_expanded_calls"] >= 1, stats
+            assert "Helpers.early_value(value)" not in rendered
+            assert "\n\t\telif " in rendered
+            assert "Helpers.affine(number)" not in rendered
             assert stats["scalar_structs"] >= 1, stats
         if entry["name"] == "references":
             package_source = "\n".join(path.read_text() for path in target.rglob("*.gd"))
@@ -110,7 +110,7 @@ func _init() -> void:
             assert "return false or Helpers.is_gdscript_path(path)" not in rendered
             assert stats["scalar_structs"] > 3, stats
         if entry["name"] in ("inline-off", "references"):
-            assert stats["struct_read_casts"] > 0 and stats["struct_typed_captures"] == 0, stats
+            assert stats["struct_typed_captures"] > 0, stats
         print(f"PASS {entry['name']}: {stats.get('inline_calls', 0)} calls inlined", flush=True)
     assert hashes() == before, "Export changed fixture source files"
     print("PASS exported runtimes and source preservation", flush=True)

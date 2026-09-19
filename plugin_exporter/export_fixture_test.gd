@@ -348,7 +348,7 @@ static func _test_optimizer() -> void:
 		_check("%s: scalar locals" % variant, _has(dir, path, "_struct_opt_"), true)
 		_check("%s: expanded inline" % variant, _has(dir, path, "_inline_"), true)
 		_check("%s: direct call removed" % variant, _has(dir, path, "Helpers.affine(number)"), false)
-		_check("%s: struct call removed" % variant, _has(dir, path, "Helpers.struct_score("), false)
+		_check("%s: reference helper retained without aggressive" % variant, _has(dir, path, "Helpers.struct_score("), true)
 
 
 ## Each variant's setting must reach that variant and no other. The config declares them as untyped

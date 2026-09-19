@@ -17,12 +17,12 @@ static func run_tests() -> Dictionary:
 	if not Init.PluginExportJSON.get_body_data().options.parser_settings.parse_gd.optimizer.enabled:
 		failures.append("template defaults leaked between initializations")
 	var defaults := Optimization.configuration({})
-	if not defaults.errors.is_empty() or not defaults.options.enabled or not defaults.options.inline_functions or defaults.options.struct_read_types != 1:
+	if not defaults.errors.is_empty() or not defaults.options.enabled or defaults.options.inline_mode != "tagged" or defaults.options.struct_mode != "tagged":
 		failures.append("missing optimizer block did not enable shared defaults")
-	var partial := Optimization.configuration({"inline_functions": false})
-	if not partial.errors.is_empty() or partial.options.inline_functions or not partial.options.scalar_replacement:
+	var partial := Optimization.configuration({"inline_mode": "off"})
+	if not partial.errors.is_empty() or partial.options.inline_mode != "off" or partial.options.struct_mode != "tagged":
 		failures.append("partial optimizer settings lost defaults")
-	var disabled := Optimization.configuration({"enabled": false, "unknown": true, "struct_read_types": 99})
+	var disabled := Optimization.configuration({"enabled": false, "unknown": true, "struct_mode": "unknown"})
 	if not disabled.errors.is_empty() or disabled.options != {"enabled": false}:
 		failures.append("disabled optimizer validated inactive settings")
 	for value in [false, null, [], {"enabled": "false"}, {"enabled": 0}, {"unknown": true}]:

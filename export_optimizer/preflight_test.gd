@@ -27,31 +27,22 @@ static func run_tests() -> Dictionary:
 	var passes := [Preflight.Optimizer.StructPass, Preflight.Optimizer.InlinePass]
 	preflight.prepare({INLINE: INLINE, VALUE: VALUE}, {}, passes)
 	if (not preflight.errors.is_empty() or preflight.replacements.size() != 2
-			or preflight.stats.get("inline_calls", 0) != 1):
+			or preflight.stats.get("inline_calls", 0) != 2):
 		failures.append("combined passes did not aggregate replacements and inline statistics")
 	preflight.prepare({INLINE: INLINE, VALUE: VALUE, BAD: BAD}, {}, passes)
 	if preflight.errors.is_empty() or not preflight.replacements.is_empty():
 		failures.append("failed combined preflight retained replacements")
-	for references in [false, true]:
-		for variants in [false, true]:
-			preflight.prepare({INLINE: INLINE}, {}, [Preflight.Optimizer.InlinePass], {
-				"inline_functions_allow_ref_counted": references, "inline_functions_allow_variants": variants})
-			if not preflight.errors.is_empty() or preflight.stats.get("inline_calls", 0) != 1 + int(references) + int(variants):
-				failures.append("inline opt-ins were not independently forwarded by preflight")
-	for mode in 3:
-		var options := {"scalar_replacement": true, "struct_read_types": mode}
-		preflight.prepare({VALUE: VALUE}, {}, [Preflight.Optimizer.StructPass], options)
-		if not preflight.errors.is_empty():
-			failures.append("configured preflight failed: " + str(preflight.errors))
-		preflight.prepare({VALUE: VALUE, BAD: BAD}, {}, passes, options)
-		if preflight.errors.is_empty() or not preflight.replacements.is_empty():
-			failures.append("configured failed preflight retained replacements")
-	preflight.prepare({VALUE: VALUE}, {}, [], {"scalar_replacement": true, "struct_read_types": 1})
-	if preflight.warnings.is_empty() or not preflight.replacements.is_empty():
-		failures.append("dependent options without StructPass were not inactive with a warning")
-	preflight.prepare({VALUE: VALUE}, {}, passes, {"struct_read_types": 99})
+	for aggressive:bool in [false, true]:
+		preflight.prepare({INLINE: INLINE}, {}, [Preflight.Optimizer.InlinePass], {"aggressive": aggressive})
+		if not preflight.errors.is_empty() or preflight.stats.get("inline_calls", 0) != (5 if aggressive else 2):
+			failures.append("aggressive policy was not forwarded: " + str(preflight.stats))
+	for mode:String in ["tagged", "auto", "off"]:
+		preflight.prepare({VALUE: VALUE}, {}, passes, {"struct_mode": mode, "inline_mode": "off"})
+		if not preflight.errors.is_empty() or preflight.replacements.is_empty() != (mode == "off"):
+			failures.append("struct mode not forwarded: " + mode)
+	preflight.prepare({VALUE: VALUE}, {}, passes, {"struct_mode": "unknown"})
 	if preflight.errors.is_empty() or not preflight.replacements.is_empty():
-		failures.append("invalid read mode was accepted")
+		failures.append("invalid mode was accepted")
 	preflight.clear()
 	if not preflight.replacements.is_empty() or not preflight.errors.is_empty() or not preflight.stats.is_empty():
 		failures.append("export end retained state")

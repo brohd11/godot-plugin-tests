@@ -30,12 +30,12 @@ static func run_tests() -> Dictionary:
 			failures.append("empty/pure boolean reduction changed")
 		if script.nested(3) != 24 or script.template_nested(3) != 49:
 			failures.append("nested expansion changed numeric result")
-		for removed:String in ["Helpers.chained(", "Helpers.templated(", "Helpers.twice(", "Helpers.all_values(", "Helpers.any_values(", "Helpers.packed("]:
+		for removed:String in ["Helpers.chained(", "Helpers.templated(", "Helpers.twice(", "Helpers.all_values(", "Helpers.any_values("]:
 			if text.contains(removed):
 				failures.append("eligible helper remained: " + removed + " " + str(result.warnings))
 		if not text.contains('Helpers.divides(number("a", 1), 0)'):
 			failures.append("substitution introduced constant zero divisor")
-		if not text.contains("Helpers.safe_all(probe(") or not text.contains("Helpers.cycle_a(value)"):
+		if not text.contains("Helpers.packed(") or not text.contains("Helpers.safe_all(probe(") or not text.contains("Helpers.cycle_a(value)"):
 			failures.append("unsafe normal reduction or recursive definition expanded")
 		if text.contains("# optimizer-inline;") != debug or (debug and not text.contains('args="substitute"')):
 			failures.append("inline debug markers missing or enabled by default")

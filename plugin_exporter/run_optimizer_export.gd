@@ -18,25 +18,22 @@ func run() -> void:
 	config.plugin_folder = "fixtures"
 	config.pre_script = ""
 	config.post_script = ""
-	# The partial override below must inherit this non-default read mode.
-	config.options.parser_settings.parse_gd.optimizer = {"struct_read_types": "as_casts"}
+	# The partial override below must inherit this non-default debug setting.
+	config.options.parser_settings.parse_gd.optimizer = {"debug_tags": true}
 	for entry:Dictionary in config.exports:
-		entry.parser_overide_settings["parse_gd"] = {"optimizer": {"struct_read_types": "typed_locals"}}
+		entry.parser_overide_settings["parse_gd"] = {"optimizer": {"debug_tags": false}}
 	var base:Dictionary = config.exports[0].duplicate(true)
 	for variant:String in ["disabled", "inline-off", "references", "struct-only"]:
 		var entry:Dictionary = base.duplicate(true)
 		entry.export_name = variant
 		var options:Dictionary = {"enabled": false, "unknown": true} if variant == "disabled" else {}
 		if variant == "inline-off":
-			options.inline_functions = false
+			options.inline_mode = "off"
 		elif variant == "references":
-			options.scalar_replacement_allow_ref_counted = true
-			options.struct_read_types_allow_ref_counted = true
-			options.inline_functions_allow_variants = true
-			options.inline_functions_allow_ref_counted = true
+			options.aggressive = true
 			options.debug_tags = true
 		elif variant == "struct-only":
-			options = {"inline_functions": false, "scalar_replacement": false, "struct_read_types": "off"}
+			options = {"inline_mode": "off", "struct_mode": "tagged"}
 		entry.parser_overide_settings = {"parse_gd": {"optimizer": options}}
 		config.exports.append(entry)
 	var path := root.path_join("plugin_export.yml")

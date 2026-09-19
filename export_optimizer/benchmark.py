@@ -48,20 +48,16 @@ renderer/rendering_method="gl_compatibility"
 ''')
     run(args.godot, project, "--editor", "--import")
     before = hashes(project)
-    variants = []
-    for inline in (False, True):
-        variants.append((f"objects-inline{int(inline)}", False, False, 0, inline, False))
-        for scalar in (False, True):
-            for mode in range(3):
-                name = f"structs-scalar{int(scalar)}-reads{mode}-inline{int(inline)}"
-                variants.append((name, True, scalar, mode, inline, False))
-                if scalar or mode:
-                    variants.append((name + "-refs", True, scalar, mode, inline, True))
+    variants = [("objects", False, False, "tagged", False)]
+    for selection in ("tagged", "auto"):
+        for aggressive in (False, True):
+            for inline in (False, True):
+                variants.append((f"{selection}-aggressive{int(aggressive)}-inline{int(inline)}", True, inline, selection, aggressive))
     metadata = {}
-    for name, structs, scalar, mode, inline, references in variants:
+    for name, structs, inline, selection, aggressive in variants:
         directory = output / name
         directory.mkdir()
-        (project / "export_presets.cfg").write_text(preset(project, structs, 0, inline, scalar, mode, references))
+        (project / "export_presets.cfg").write_text(preset(project, structs, 0, inline, aggressive, selection))
         archive = directory / "source.zip"
         log = run(args.godot, project, "--export-pack", "Smoke", str(archive))
         assert "Exporting original code" not in log, log
@@ -71,9 +67,9 @@ renderer/rendering_method="gl_compatibility"
                 (directory / file).write_bytes(package.read(file))
         run(args.godot, project, "--export-pack", "Smoke", str(directory / "benchmark.pck"))
         assert hashes(project) == before, "Export modified source files"
-        stats_match = re.search(r"struct stats=(\{[^\n]+\})", log)
-        metadata[name] = {"structs": structs, "scalar": scalar, "read_types": mode,
-                          "inline": inline, "scalar_replacement_allow_ref_counted": references, "struct_read_types_allow_ref_counted": references, "stats": json.loads(stats_match[1]) if stats_match else {}}
+        stats_match = re.search(r"stats=(\{[^\n]+\})", log)
+        metadata[name] = {"struct_mode": selection if structs else "off", "inline_mode": selection if inline else "off",
+                          "aggressive": aggressive, "stats": json.loads(stats_match[1]) if stats_match else {}}
         print(f"Exported {name}", flush=True)
     runtime = args.release_runtime or args.godot
     samples = {name: [] for name in metadata}

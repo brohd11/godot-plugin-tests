@@ -24,7 +24,8 @@ def install_dependencies(project):
     for relative in paths:
         sidecar = ROOT / relative
         uid_map[sidecar.read_text().strip()] = sidecar.with_suffix("")
-    pending = [ROOT / "addons/export_optimizer/plugin.gd"]
+    # StringMap's compatibility wrapper extends a global namespace, not a quoted path.
+    pending = [ROOT / "addons/export_optimizer/plugin.gd", ROOT / "addons/addon_lib/util_r/_ns/util_r.gd"]
     copied = set()
     while pending:
         source = pending.pop()
@@ -83,12 +84,10 @@ def run(godot, project, *args, expected_error=False):
     return result.stdout
 
 
-def preset(project, enabled, mode, inline=False, scalar=False, read_types=0, allow_references=False):
+def preset(project, enabled, mode, inline=False, aggressive=False, selection="tagged"):
     (project / "optimizer.yaml").write_text(
-        f"structs: {str(enabled).lower()}\ninline_functions: {str(inline).lower()}\ndebug_tags: {str(inline).lower()}\n"
-        f"scalar_replacement: {str(scalar).lower()}\nstruct_read_types: {('off', 'typed_locals', 'as_casts')[read_types]}\n"
-        f"scalar_replacement_allow_ref_counted: {str(allow_references).lower()}\n"
-        f"struct_read_types_allow_ref_counted: {str(allow_references).lower()}\n"
+        f"struct_mode: {selection if enabled else 'off'}\ninline_mode: {selection if inline else 'off'}\n"
+        f"debug_tags: {str(inline).lower()}\naggressive: {str(aggressive).lower()}\n"
     )
     return f'''[preset.0]
 name="Smoke"
@@ -113,12 +112,11 @@ def hashes(project):
 def check_configuration(godot, project, before):
     cases = [
         ("defaults", True, "", None, False, True),
-        ("partial-references", True, "optimizer.yaml", "scalar_replacement_allow_ref_counted: true\nstruct_read_types_allow_ref_counted: true\n", False, True),
-        ("reference-casts", True, "res://optimizer.yaml", "scalar_replacement_allow_ref_counted: true\nstruct_read_types_allow_ref_counted: true\nstruct_read_types: as_casts\n", False, True),
+        ("aggressive", True, "optimizer.yaml", "aggressive: true\n", False, True),
         ("disabled", False, "res://missing.yaml", None, False, False),
         ("missing", True, "res://missing.yaml", None, True, False),
-        ("invalid", True, "res://optimizer.yaml", "scalar_replacement: wrong\n", True, False),
-        ("inactive", True, "res://optimizer.yaml", "structs: false\n", False, False),
+        ("invalid", True, "res://optimizer.yaml", "aggressive: wrong\n", True, False),
+        ("inactive", True, "res://optimizer.yaml", "struct_mode: off\ninline_mode: off\n", False, False),
     ]
     for name, enabled, path, config, error, structs in cases:
         settings = preset(project, True, 0).replace("optimization/optimize=true", f"optimization/optimize={str(enabled).lower()}")
@@ -129,13 +127,11 @@ def check_configuration(godot, project, before):
         archive = project.parent / f"{project.name}-config-{name}.zip"
         log = run(godot, project, "--export-pack", "Smoke", str(archive), expected_error=error)
         assert ("Exporting original code" in log) == error, log
-        if name == "inactive":
-            assert "options are inactive" in log, log
         with zipfile.ZipFile(archive) as package:
             rendered = package.read("references.gd").decode()
-            if name in ("partial-references", "reference-casts"):
+            if name == "aggressive":
                 assert "var record:" not in rendered and "_struct_opt_" in rendered, rendered
-                assert "_struct_opt_read_" in rendered if name == "partial-references" else "as Payload)" in rendered
+                assert "_struct_opt_read_" in rendered
             if not enabled or error:
                 assert rendered == (project / "references.gd").read_text()
         pack = archive.with_suffix(".pck")
@@ -151,6 +147,7 @@ def check_configuration(godot, project, before):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--godot", required=True)
+    parser.add_argument("--auto-only", action="store_true", help="Run auto policies and final packaging checks")
     parser.add_argument("--config-only", action="store_true", help="Run only configuration and reference export cases")
     parser.add_argument("--plugin-package", type=Path,
                         help="Test an exported addons/export_optimizer directory instead of development dependencies")
@@ -181,12 +178,13 @@ renderer/rendering_method="gl_compatibility"
     user.write_text(user.read_text().replace('preload("value.gd")', f'preload("{uid}")'))
     run(args.godot, project, "--editor", "--import")
     before = hashes(project)
-    check_configuration(args.godot, project, before)
+    if not args.auto_only:
+        check_configuration(args.godot, project, before)
     if args.config_only:
         return
-    for enabled, mode, inline in [(True, 0, False), (True, 1, False), (True, 2, False),
+    for enabled, mode, inline in ([] if args.auto_only else [(True, 0, False), (True, 1, False), (True, 2, False),
                                   (False, 2, False), (False, 0, True), (True, 0, True),
-                                  (True, 1, True), (True, 2, True)]:
+                                  (True, 1, True), (True, 2, True)]):
         (project / "export_presets.cfg").write_text(preset(project, enabled, mode, inline))
         name = f"enabled-{enabled}-mode-{mode}-inline-{inline}"
         archive = project.parent / f"{project.name}-{name}.zip"
@@ -204,9 +202,9 @@ renderer/rendering_method="gl_compatibility"
                 assert ("point.gdc" in files) == (mode != 0), files
             if inline:
                 early_source = package.read("inline.gd").decode()
-                assert "var result := early_value(value)" in early_source, early_source
-                assert "early_effect(events, value)" not in early_source, early_source
-                assert 'control_flow="single_iteration"' in early_source, early_source
+                assert "var result := early_value(value)" not in early_source, early_source
+                assert "\n\t\telif " in early_source and " else " not in early_source, early_source
+                assert "early_effect(events, value)" in early_source, early_source
                 rendered = package.read("user.gd").decode()
                 assert "return 2 * affine(value, 3)" not in rendered, rendered
                 assert "if is_gdscript_path(path):" not in rendered, rendered
@@ -215,8 +213,8 @@ renderer/rendering_method="gl_compatibility"
                 assert "_inline_" in rendered, rendered
                 assert "# optimizer-inline;" in rendered, rendered
                 assert "return step()" not in rendered, rendered
-                assert "var total := read_value(value)" not in rendered, rendered
-                assert "User.read_value(value)" not in package.read("main.gd").decode()
+                assert "var total := read_value(value)" in rendered, rendered
+                assert "User.read_value(value)" in package.read("main.gd").decode()
                 assert "User.expanded_vector(Vector2(2, 3), 2.0)" not in package.read("main.gd").decode()
                 assert "User.affine(7, 3)" not in package.read("main.gd").decode()
                 assert "OptimizerSmokeUser.affine(7, 3)" not in package.read("main.gd").decode()
@@ -229,28 +227,24 @@ renderer/rendering_method="gl_compatibility"
         assert "OPTIMIZER_SMOKE_OK" in output, output
         assert hashes(project) == before, "Export changed project sources"
         print(f"PASS {name}", flush=True)
-    for scalar, read_types, inline in [(s, r, i) for s in (False, True)
-                                      for r in range(3) for i in (False, True) if s or r]:
-        (project / "export_presets.cfg").write_text(preset(project, True, 0, inline, scalar, read_types))
-        name = f"scalar-{scalar}-reads-{read_types}-inline-{inline}"
-        archive = project.parent / f"{project.name}-{name}.zip"
-        output = run(args.godot, project, "--export-pack", "Smoke", str(archive))
-        assert "Exporting original code" not in output, output
-        assert "struct stats=" in output, output
-        with zipfile.ZipFile(archive) as package:
-            rendered = package.read("user.gd").decode()
-            if scalar:
+    for selection in (("auto",) if args.auto_only else ("tagged", "auto")):
+        for aggressive in (False, True):
+            (project / "export_presets.cfg").write_text(preset(project, True, 0, True, aggressive, selection))
+            name = f"{selection}-aggressive-{aggressive}"
+            archive = project.parent / f"{project.name}-{name}.zip"
+            output = run(args.godot, project, "--export-pack", "Smoke", str(archive))
+            assert "Exporting original code" not in output, output
+            assert "stats=" in output, output
+            with zipfile.ZipFile(archive) as package:
+                rendered = package.read("user.gd").decode()
                 assert "_struct_opt_" in rendered and "var pair:" not in rendered, rendered
-            if read_types == 1:
                 assert "_struct_opt_read_" in rendered, rendered
-            if read_types == 2:
-                assert "as int)" in rendered, rendered
-        pack = archive.with_suffix(".pck")
-        run(args.godot, project, "--export-pack", "Smoke", str(pack))
-        output = run(args.godot, project, "--main-pack", str(pack), "--script", "res://main.gd", "--", "optimized")
-        assert "OPTIMIZER_SMOKE_OK" in output, output
-        assert hashes(project) == before
-        print(f"PASS {name}", flush=True)
+            pack = archive.with_suffix(".pck")
+            run(args.godot, project, "--export-pack", "Smoke", str(pack))
+            output = run(args.godot, project, "--main-pack", str(pack), "--script", "res://main.gd", "--", "optimized")
+            assert "OPTIMIZER_SMOKE_OK" in output, output
+            assert hashes(project) == before
+            print(f"PASS {name}", flush=True)
     # Inspect the stored bytes: custom runtime templates are only needed to decrypt the pack.
     for pattern, encrypted in [("*.gd", True), ("*.gdc", False)]:
         settings = preset(project, True, 2).replace("[preset.0.options]", f'''encrypt_pck=true
@@ -267,7 +261,7 @@ script_encryption_key="{'ab' * 32}"
         assert hashes(project) == before, "Encrypted export changed project sources"
     print("PASS PCK encryption filters cover replacement .gd files", flush=True)
     shutil.copy2(FIXTURES / "invalid_struct.gd", project / "invalid.gd")
-    (project / "export_presets.cfg").write_text(preset(project, True, 0, True, True, 2))
+    (project / "export_presets.cfg").write_text(preset(project, True, 0, True, True))
     failed = project.parent / f"{project.name}-fallback.zip"
     output = run(args.godot, project, "--export-pack", "Smoke", str(failed), expected_error=True)
     assert "Exporting original code; no optimizations were applied" in output, output

@@ -11,7 +11,7 @@ static func run_tests() -> Dictionary:
 		context.debug_tags = debug
 		var optimizer = Optimizer.new()
 		var prepared:Dictionary = optimizer.prepare({path: path, BASE + "helpers.gd": BASE + "helpers.gd"}, context, [Optimizer.InlinePass])
-		if not prepared.errors.is_empty() or prepared.warnings.size() != 6:
+		if not prepared.errors.is_empty() or prepared.warnings.size() != 7:
 			failures.append("unexpected preparation: " + str(prepared))
 		for spaces:bool in [false, true]:
 			var source := FileAccess.get_file_as_string(path)
@@ -25,11 +25,16 @@ static func run_tests() -> Dictionary:
 				failures.append("early return compilation failed")
 				print(text)
 				continue
-			if result.stats.inline_early_return_calls != 5 or result.stats.inline_expanded_calls != 5:
+			if result.stats.inline_early_return_calls != 2 or result.stats.inline_expanded_calls != 3:
 				failures.append("missing wrapper expansions: " + str(result.stats) + str(result.warnings))
-			for retained:String in ["Helpers.classify(value)", "Helpers.classify(value, 2)", "Helpers.ordered(argument(", "Helpers.unused(Events.make()", "Helpers.owned(events, stop)"]:
+			for retained:String in ["Helpers.classify(value)", "Helpers.classify(value, 2)", "Helpers.owned(events, stop)", "Helpers.unused(Events.make()", "Helpers.touch(events, value)"]:
 				if not text.contains(retained):
 					failures.append("value-returning guard helper expanded: " + retained)
+			for removed:String in ["Helpers.ordered(argument("]:
+				if text.contains(removed):
+					failures.append("return-only guard helper remained a call: " + removed)
+			if text.contains(" else "):
+				failures.append("guard expansion generated a ternary")
 			for method:String in ["classify", "assign", "touch"]:
 				for value:int in [-3, -1, 0, 1, 2, 9]:
 					if script.call(method, value) != original.call(method, value):

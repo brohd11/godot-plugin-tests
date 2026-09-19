@@ -15,7 +15,7 @@ func _init() -> void:
 	var report:Array = []
 	for variants in [false, true]:
 		var context = Optimizer.Context.new()
-		context.inline_functions_allow_variants = variants
+		context.aggressive = variants
 		var optimizer = Optimizer.new()
 		var prepared:Dictionary = optimizer.prepare({FIXTURE: FIXTURE}, context, [Optimizer.InlinePass])
 		if not prepared.errors.is_empty():
@@ -48,7 +48,7 @@ func _init() -> void:
 			baseline.sort()
 			optimized.sort()
 			var middle:int = samples >> 1
-			report.append({"method": method, "allow_variants": variants, "iterations": iterations,
+			report.append({"method": method, "aggressive": variants, "iterations": iterations,
 				"samples": samples, "checksum": checksum, "original_us": baseline[middle],
 				"optimized_us": optimized[middle], "speedup": float(baseline[middle]) / optimized[middle]})
 	print("EXPRESSION_BENCHMARK " + JSON.stringify(report))
