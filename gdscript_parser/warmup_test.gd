@@ -6,7 +6,7 @@ extends SceneTree
 ##
 ##     Godot --headless --path . --script res://tests/gdscript_parser/warmup_test.gd
 
-const ParserWarmup = preload("res://addons/addon_lib/brohd/alib_editor/misc/parser/editor_parser/warmup.gd")
+const ParserWarmup = preload("res://addons/_lib/brohd/alib_editor/misc/parser/editor_parser/warmup.gd")
 
 const DIR := "res://tests/gdscript_parser/"
 # own dir: the suites share one process under the aggregator, so don't reuse another suite's cache dir

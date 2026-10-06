@@ -25,7 +25,7 @@ def install_dependencies(project):
         sidecar = ROOT / relative
         uid_map[sidecar.read_text().strip()] = sidecar.with_suffix("")
     # StringMap's compatibility wrapper extends a global namespace, not a quoted path.
-    pending = [ROOT / "addons/export_optimizer/plugin.gd", ROOT / "addons/addon_lib/util_r/_ns/util_r.gd"]
+    pending = [ROOT / "addons/export_optimizer/plugin.gd", ROOT / "addons/_lib/util_r/_ns/util_r.gd"]
     copied = set()
     while pending:
         source = pending.pop()
@@ -59,8 +59,8 @@ def install_yaml_requirement(project):
     # Model the plugin.cfg install requirement using the checked-out dependency.
     cfg = (project / "addons/export_optimizer/plugin.cfg").read_text()
     assert '"brohd11/godot-yaml-parser@v2.1.0"' in cfg, cfg
-    source = ROOT / "addons/addon_lib/yaml_parser"
-    target = project / "addons/addon_lib/yaml_parser"
+    source = ROOT / "addons/_lib/yaml_parser"
+    target = project / "addons/_lib/yaml_parser"
     target.mkdir(parents=True, exist_ok=True)
     for name in ("yaml.gd", "yaml.gd.uid", "version.cfg"):
         if (source / name).exists():

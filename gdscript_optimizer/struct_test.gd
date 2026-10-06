@@ -6,8 +6,8 @@ extends EditorScript
 ##
 ##     load("res://tests/gdscript_optimizer/struct_test.gd").run_tests()
 
-const StructRewrite = preload("res://addons/addon_lib/gdscript_optimizer/passes/struct/struct_rewrite.gd")
-const StructTypes = preload("res://addons/addon_lib/gdscript_optimizer/passes/struct/struct_types.gd")
+const StructRewrite = preload("res://addons/_lib/gdscript_optimizer/passes/struct/struct_rewrite.gd")
+const StructTypes = preload("res://addons/_lib/gdscript_optimizer/passes/struct/struct_types.gd")
 const P = "res://s.gd"
 
 const VEC = "res://tests/gdscript_optimizer/fixtures/struct_vec.gd"

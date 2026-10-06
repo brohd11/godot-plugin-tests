@@ -124,7 +124,7 @@ static func _test_layout() -> void:
 	_check("dependency tag: current dir", _exists(dir, "src/version.cfg"), true)
 	_check("dependency tag: plain", _found(dir, "yaml_parser/version.cfg"), true)
 
-	_check("licenses gathered", _found(dir, "licenses/addon_lib_brohd/LICENSE"), true)
+	_check("licenses gathered", _found(dir, "licenses/_lib_brohd/LICENSE"), true)
 	# fixtures/vendor holds a LICENSE with a second one under vendor/nested, each claimed by a tagged
 	# file. Closest-ancestor matching has to hand the subtree to the nested one while vendor/ keeps
 	# the rest, so both arrive - matching in scan order let the outer license swallow the subtree.
@@ -176,16 +176,16 @@ static func _test_rewrites() -> void:
 	_check("uid preload resolved to the copy", _has(dir, "src/core/consumer.gd",
 		'preload("uid://'), false)
 	_check("malformed absolute path rewritten to the copy", _has(dir, "src/utils_remote.gd",
-		'preload("res://addons/plugin_exporter_test/src/remote/addons/addon_lib/brohd/alib_runtime/utils/u_list.gd")'), true)
+		'preload("res://addons/plugin_exporter_test/src/remote/addons/_lib/brohd/alib_runtime/utils/u_list.gd")'), true)
 	for variant in _dirs:
 		_check("%s: malformed absolute path normalized" % variant,
-			_has(_dirs[variant], "src/utils_remote.gd", "addon_lib/brohd//"), false)
+			_has(_dirs[variant], "src/utils_remote.gd", "_lib/brohd//"), false)
 		_check("%s: untagged hub dependency copied" % variant,
 			_found(_dirs[variant], "/u_list.gd"), true)
 		_check("%s: preload hub needs no remote tag" % variant,
 			_has(_dirs[variant], "src/utils_remote.gd", "#! remote"), false)
 	_check("ignore-remote path untouched", _has(dir, "src/core/consumer.gd",
-		'"res://addons/addon_lib/brohd/README.md" #! ignore-remote'), true)
+		'"res://addons/_lib/brohd/README.md" #! ignore-remote'), true)
 	_check("namespace directive stripped", _has(dir, "src/core/tags.gd", "#! namespace"), false)
 
 	_check("strip-cast: built-in name", _has(dir, "src/core/tags.gd",
@@ -199,11 +199,11 @@ static func _test_rewrites() -> void:
 	_check("remote extends replaced by target", _has(dir, "src/remote_extends.gd",
 		"static func get_major_version"), true)
 	_check("remote extends stub gone", _has(dir, "src/remote_extends.gd",
-		'extends "res://addons/addon_lib'), false)
+		'extends "res://addons/_lib'), false)
 
 	# The scene keeps its references, rewritten to the copies.
 	_check("tscn ext_resource rewritten", _has(dir, "src/scenes/fixture_scene.tscn",
-		'path="res://addons/addon_lib'), false)
+		'path="res://addons/_lib'), false)
 	_check("tres script_class header preserved", _has(dir, "src/scenes/fixture_resource.tres",
 		'script_class="PETResource"'), true)
 
@@ -274,7 +274,7 @@ static func _test_renamed() -> void:
 	# everywhere else, which only matters when rename_plugin is on - this is the only case in the
 	# repo that exercises it.
 	_check("renamed: license still landed inside the export",
-		_found(dir, "licenses/addon_lib_brohd/LICENSE"), true)
+		_found(dir, "licenses/_lib_brohd/LICENSE"), true)
 	# gather_docs maps out of res:// the same way, so it shares that hazard.
 	_check("renamed: docs landed inside the export", _exists(dir, ".doc/index.md"), true)
 

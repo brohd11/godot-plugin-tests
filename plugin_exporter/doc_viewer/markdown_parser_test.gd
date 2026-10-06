@@ -175,7 +175,7 @@ static func _test_no_marker_collision() -> void:
 static func _test_tag_balance() -> void:
 	var corpus:Array[String] = [
 		"# Heading with `code` and [a link](x.md)",
-		" - [EditorNodeRef](https://github.com/brohd11/Godot-Editor-Node-Ref) -> res://addons/addon_lib/editor_node_ref",
+		" - [EditorNodeRef](https://github.com/brohd11/Godot-Editor-Node-Ref) -> res://addons/_lib/editor_node_ref",
 		"### **Be sure to download the zip in releases, not the repo source code.**",
 		"> quoted **bold** with [link](y.md) and 2 digits",
 		"  - nested item with `a[0]` and *emphasis*",

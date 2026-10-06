@@ -7,7 +7,7 @@
 ## undeclared identifier is a PARSE error, so a suite naming the class directly could not even load
 ## once the addon was removed. Everything below goes through ClassDB / load().
 
-const SERVICE_PATH := "res://addons/addon_lib/gdscript_lsp/service.gd"
+const SERVICE_PATH := "res://addons/_lib/gdscript_lsp/service.gd"
 
 
 ## True only when the backend can actually serve a parse: the service node is built under EditorNode,

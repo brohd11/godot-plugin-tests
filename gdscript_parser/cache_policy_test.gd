@@ -1,6 +1,6 @@
 extends RefCounted
 
-const Parser = preload("res://addons/addon_lib/gdscript_parser/gdscript_parser.gd")
+const Parser = preload("res://addons/_lib/gdscript_parser/gdscript_parser.gd")
 const PATH = "res://tests/gdscript_parser/fixtures/cache_policy.gd"
 const CACHE_DIR = "res://.godot/parser_cache_policy_test"
 

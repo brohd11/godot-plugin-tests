@@ -1,6 +1,6 @@
 extends RefCounted
 ## Editor Console runtime checks, driven by runtime_test.gd (headless and editor console `test`).
-const Sh = preload("res://addons/addon_lib/gdsh/_ns/gd_sh.gd")
+const Sh = preload("res://addons/_lib/gdsh/_ns/gd_sh.gd")
 const TUIList = preload("res://tests/gdsh/fixtures/tui_list.gd")
 const Adapter = preload("res://addons/editor_console/src/utils/os_adapter.gd")
 var checks:int = 0
@@ -39,7 +39,7 @@ class EditorRouterProbe extends "res://addons/editor_console/src/default_command
 			command.selected = selected
 			return command
 		if exact_override:
-			commands["script.Inner"] = {&"get_command": func(): return preload("res://addons/addon_lib/gdsh/src/core/builtins/echo/echo.gd").new()}
+			commands["script.Inner"] = {&"get_command": func(): return preload("res://addons/_lib/gdsh/src/core/builtins/echo/echo.gd").new()}
 		return commands
 
 class TempConfig extends EditorConsoleSingleton.UtilsLocal.Config:

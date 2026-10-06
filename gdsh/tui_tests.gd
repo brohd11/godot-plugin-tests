@@ -1,6 +1,6 @@
 extends RefCounted
 ## Frame-based integration checks: real focused input, display ownership and teardown.
-const Sh = preload("res://addons/addon_lib/gdsh/_ns/gd_sh.gd")
+const Sh = preload("res://addons/_lib/gdsh/_ns/gd_sh.gd")
 const TUIList = preload("res://tests/gdsh/fixtures/tui_list.gd")
 var suite
 
@@ -195,7 +195,7 @@ func _finish_after_close(console, results:Array) -> void:
 
 
 func _test_row_capacity() -> void:
-	var session = preload("res://addons/addon_lib/gdsh/src/tui/tui_session.gd").new()
+	var session = preload("res://addons/_lib/gdsh/src/tui/tui_session.gd").new()
 	_tree().root.add_child(session)
 	var display = session.display
 	for font in [Sh.Console.SourceFont, ThemeDB.fallback_font]:

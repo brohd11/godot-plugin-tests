@@ -1,12 +1,12 @@
 extends RefCounted
 ## gdsh_lib runtime checks, driven by runtime_test.gd (headless and editor console `test`).
 
-const Sh = preload("res://addons/addon_lib/gdsh/_ns/gd_sh.gd")
-const Manifest = preload("res://addons/addon_lib/gdsh_lib/utils/manifest.gd")
-const UTILS = "res://addons/addon_lib/gdsh_lib/utils"
+const Sh = preload("res://addons/_lib/gdsh/_ns/gd_sh.gd")
+const Manifest = preload("res://addons/_lib/gdsh_lib/utils/manifest.gd")
+const UTILS = "res://addons/_lib/gdsh_lib/utils"
 const FIXTURES = "res://tests/gdsh_lib/fixtures"
-const TREE = "res://addons/addon_lib/gdsh_lib/tree/tree.gd"
-const TreeManifest = preload("res://addons/addon_lib/gdsh_lib/tree/manifest.gd")
+const TREE = "res://addons/_lib/gdsh_lib/tree/tree.gd"
+const TreeManifest = preload("res://addons/_lib/gdsh_lib/tree/manifest.gd")
 var checks = 0
 var failures = 0
 var report:Array[String] = []

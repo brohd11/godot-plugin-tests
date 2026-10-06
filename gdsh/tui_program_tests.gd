@@ -1,5 +1,5 @@
 extends RefCounted
-const Sh = preload("res://addons/addon_lib/gdsh/_ns/gd_sh.gd")
+const Sh = preload("res://addons/_lib/gdsh/_ns/gd_sh.gd")
 
 class Source extends RefCounted:
 	signal changed(value)

@@ -16,7 +16,7 @@ def main():
     project = Path(tempfile.mkdtemp(prefix='editor-console-tests-'))
     print(f'Isolated project: {project}', flush=True)
     try:
-        for directory in ['addons/addon_lib', 'addons/editor_console', 'addons/zyx_popup_wrapper', 'tests/editor_console']:
+        for directory in ['addons/_lib', 'addons/editor_console', 'addons/zyx_popup_wrapper', 'tests/editor_console']:
             shutil.copytree(repo / directory, project / directory,
                             ignore=shutil.ignore_patterns('.git', 'export_ignore', '__pycache__'))
         # Shared test-only TUI; it is deliberately absent from GDSh builtins.

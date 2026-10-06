@@ -15,10 +15,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix="tag-parser-core-") as directory:
         project = Path(directory)
         for relative in (
-            "addons/addon_lib/tag_parser/scanner.gd",
-            "addons/addon_lib/tag_parser/options.gd",
-            "addons/addon_lib/tag_parser/registry.gd",
-            "addons/addon_lib/tag_parser/editor/metadata.gd",
+            "addons/_lib/tag_parser/scanner.gd",
+            "addons/_lib/tag_parser/options.gd",
+            "addons/_lib/tag_parser/registry.gd",
+            "addons/_lib/tag_parser/editor/metadata.gd",
             "tests/tag_parser/run_headless.gd",
             "tests/tag_parser/registry_test.gd",
             "tests/tag_parser/scanner_test.gd",

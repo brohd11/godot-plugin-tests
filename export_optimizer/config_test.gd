@@ -1,6 +1,6 @@
 extends RefCounted
 
-const Config = preload("res://addons/addon_lib/gdscript_optimizer/config.gd")
+const Config = preload("res://addons/_lib/gdscript_optimizer/config.gd")
 
 static func run_tests() -> Dictionary:
 	var failures:Array = []

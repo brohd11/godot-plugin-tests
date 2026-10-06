@@ -5,7 +5,7 @@
 ## load once the addon was removed (that is what broke inline_lambda_test.gd). Everything below goes
 ## through ClassDB / load() so a missing addon is a runtime false, not a dead file.
 
-const SERVICE_PATH := "res://addons/addon_lib/gdscript_lsp/service.gd"
+const SERVICE_PATH := "res://addons/_lib/gdscript_lsp/service.gd"
 
 
 ## True only when the backend can actually serve a parse. The class existing is not enough: the

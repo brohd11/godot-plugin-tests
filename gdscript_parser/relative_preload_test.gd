@@ -1,6 +1,6 @@
 extends RefCounted
 
-const Parser = preload("res://addons/addon_lib/gdscript_parser/gdscript_parser.gd")
+const Parser = preload("res://addons/_lib/gdscript_parser/gdscript_parser.gd")
 const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const SOURCE = "res://tests/gdscript_parser/fixtures/relative_preload.gd"
 const TARGET = "res://tests/gdscript_parser/fixtures/relative_payload.gd"

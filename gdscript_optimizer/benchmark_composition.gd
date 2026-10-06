@@ -1,6 +1,6 @@
 extends SceneTree
 ## Timings exclude optimization, compilation, and warmup; counters validate each evaluation policy.
-const Optimizer = preload("res://addons/addon_lib/gdscript_optimizer/optimizer.gd")
+const Optimizer = preload("res://addons/_lib/gdscript_optimizer/optimizer.gd")
 const BASE = "res://tests/gdscript_optimizer/fixtures/composition/"
 
 func _init() -> void:

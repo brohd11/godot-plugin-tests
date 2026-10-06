@@ -1,6 +1,6 @@
 extends RefCounted
 
-const Optimizer = preload("res://addons/addon_lib/gdscript_optimizer/optimizer.gd")
+const Optimizer = preload("res://addons/_lib/gdscript_optimizer/optimizer.gd")
 const FIXTURE = "res://tests/gdscript_optimizer/fixtures/struct_reference_types.gd"
 
 static func run_tests() -> Dictionary:

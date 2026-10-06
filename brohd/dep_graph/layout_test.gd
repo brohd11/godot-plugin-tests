@@ -14,8 +14,8 @@ extends EditorScript
 
 const UResource = preload("uid://72uu8yngsoht") #! resolve ALibRuntime.Utils.UResource
 const Dependencies = UResource.Dependencies
-const Layout = preload("res://addons/addon_lib/brohd/alib_runtime/ui/dep_graph/layout.gd")
-const DepFileNode = preload("res://addons/addon_lib/brohd/alib_runtime/ui/dep_graph/dep_file_node.gd")
+const Layout = preload("res://addons/_lib/brohd/alib_runtime/ui/dep_graph/layout.gd")
+const DepFileNode = preload("res://addons/_lib/brohd/alib_runtime/ui/dep_graph/dep_file_node.gd")
 
 const DIR = "user://alib_dep_graph_tests/"
 const NODE_SIZE = Vector2(200, 60)

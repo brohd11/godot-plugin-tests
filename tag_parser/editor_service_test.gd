@@ -1,7 +1,7 @@
 extends RefCounted
 
-const Service = preload("res://addons/addon_lib/tag_parser/editor/tag_parser.gd")
-const Legacy = preload("res://addons/addon_lib/brohd/alib_editor/misc/parser/tag_parser.gd")
+const Service = preload("res://addons/_lib/tag_parser/editor/tag_parser.gd")
+const Legacy = preload("res://addons/_lib/brohd/alib_editor/misc/parser/tag_parser.gd")
 const P = "res://unsaved_tag_test.gd"
 const TAG = &"tag_parser_service_test"
 const FIXTURE = "res://tests/tag_parser/fixtures/metadata.gd"
@@ -14,7 +14,7 @@ class Handler:
 		return raw.duplicate()
 
 class BufferService:
-	extends "res://addons/addon_lib/tag_parser/editor/tag_parser.gd"
+	extends "res://addons/_lib/tag_parser/editor/tag_parser.gd"
 	var buffer := ""
 	func _read_source(_path:String) -> String:
 		return buffer

@@ -1,6 +1,6 @@
 extends SceneTree
 
-const Parser = preload("res://addons/addon_lib/gdscript_parser/gdscript_parser.gd")
+const Parser = preload("res://addons/_lib/gdscript_parser/gdscript_parser.gd")
 const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const SOURCE = "extends RefCounted\nvar callbacks = [func(a: int): return a, func(b: String): return b]\nfunc run(captured: Color):\n\tvar before: int = 1\n\t[1].map(func(value: int):\n\t\tvar own: String = str(value)\n\t\t[2].map(func(inner: int): return inner + before)\n\t\treturn own\n\t)\n\tvar assigned = func(arg: int): return arg\n\tvar after: int = 2\n"
 

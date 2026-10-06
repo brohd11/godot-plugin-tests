@@ -17,7 +17,7 @@ def main():
     repo = Path(__file__).resolve().parents[2]
     # util_r is referenced through its `UtilR` class_name, which the dependency walk below cannot
     # see, so it is seeded explicitly rather than discovered.
-    modules = [Path('addons/addon_lib/gdsh'), Path('addons/addon_lib/util_r')]
+    modules = [Path('addons/_lib/gdsh'), Path('addons/_lib/util_r')]
     project = Path(tempfile.mkdtemp(prefix='gdsh-runtime-'))
     print(f'Isolated project: {project}', flush=True)
     try:

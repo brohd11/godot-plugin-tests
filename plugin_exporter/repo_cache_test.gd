@@ -9,7 +9,7 @@ extends EditorScript
 
 const RepoCache = preload("res://addons/plugin_exporter/src/class/release/repo_cache.gd")
 
-const SOURCE_REPO = "res://addons/addon_lib/editor_node_ref"
+const SOURCE_REPO = "res://addons/_lib/editor_node_ref"
 const TAG = "v0.3.2"
 const DIR = "user://pe_repo_cache_tests"
 

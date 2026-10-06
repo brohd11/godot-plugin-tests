@@ -1,5 +1,5 @@
 extends RefCounted
-const Parser = preload("res://addons/addon_lib/gdscript_parser/gdscript_parser.gd")
+const Parser = preload("res://addons/_lib/gdscript_parser/gdscript_parser.gd")
 const PATH = "res://tests/gdscript_parser/fixtures/gp_base.gd"
 
 static func run_tests() -> Dictionary:

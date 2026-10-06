@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-MODULES = [Path('addons/addon_lib/gdsh'), Path('addons/addon_lib/util_r'), Path('addons/addon_lib/gdsh_lib/utils'), Path('addons/addon_lib/gdsh_lib/tree'), Path('addons/addon_lib/gdsh_lib/tui'), Path('tests/gdsh_lib')]
+MODULES = [Path('addons/_lib/gdsh'), Path('addons/_lib/util_r'), Path('addons/_lib/gdsh_lib/utils'), Path('addons/_lib/gdsh_lib/tree'), Path('addons/_lib/gdsh_lib/tui'), Path('tests/gdsh_lib')]
 
 
 def main():

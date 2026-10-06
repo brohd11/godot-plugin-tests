@@ -7,8 +7,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-TEXT_MODULE = Path('addons/addon_lib/brohd/alib_runtime/misc/syntax_highlighters/text')
-PROVIDER = Path('addons/addon_lib/gdsh/src/ui/script_highlighter_logic.gd')
+TEXT_MODULE = Path('addons/_lib/brohd/alib_runtime/misc/syntax_highlighters/text')
+PROVIDER = Path('addons/_lib/gdsh/src/ui/script_highlighter_logic.gd')
 TEST = Path('tests/brohd/text_highlighters/dispatcher_test.gd')
 
 

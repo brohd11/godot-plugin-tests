@@ -18,9 +18,9 @@ const Dependencies = UResource.Dependencies
 const Kind = Dependencies.Kind
 
 const DIR = "user://alib_dep_tests/"
-## A real uid from addon_lib, so uid resolution is tested against the live registry.
+## A real uid from _lib, so uid resolution is tested against the live registry.
 const UFILE_UID = "uid://gs632l1nhxaf"
-const UFILE_PATH = "res://addons/addon_lib/brohd/alib_runtime/utils/u_file.gd"
+const UFILE_PATH = "res://addons/_lib/brohd/alib_runtime/utils/u_file.gd"
 const DEAD_UID = "uid://baaaaaaaaaaaa"
 
 static var _failures:Array[String] = []
@@ -216,7 +216,7 @@ static func _test_uid_and_relative() -> void:
 
 	var d = _open(src)
 	d.follow_extensions = ["gd"]
-	d.max_depth = 1 # do not crawl all of addon_lib
+	d.max_depth = 1 # do not crawl all of _lib
 	var graph = d.get_graph()
 
 	_check("uid: resolved to path", graph.has(UFILE_PATH), true)
@@ -319,7 +319,7 @@ static func _test_serialized_files() -> void:
 	]) + "\n")
 
 	var d = _open(scene)
-	d.max_depth = 2 # uid entry lands on u_file.gd; do not crawl addon_lib from here
+	d.max_depth = 2 # uid entry lands on u_file.gd; do not crawl _lib from here
 	var graph = d.get_graph()
 
 	_check("tscn: script reached", graph.has(script), true)

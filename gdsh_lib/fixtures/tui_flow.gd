@@ -1,5 +1,5 @@
 extends GDShTUI.ScreenCommand
-const TUI = preload("res://addons/addon_lib/gdsh_lib/tui/manifest.gd").TUI
+const TUI = preload("res://addons/_lib/gdsh_lib/tui/manifest.gd").TUI
 
 class ConfirmScreen extends TUI.Screen:
 	var confirmation:TUI.Confirmation

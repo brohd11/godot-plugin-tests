@@ -1,6 +1,6 @@
 extends RefCounted
-const Sh = preload("res://addons/addon_lib/gdsh/_ns/gd_sh.gd")
-const Model = preload("res://addons/addon_lib/gdsh/src/ui/terminal_input.gd")
+const Sh = preload("res://addons/_lib/gdsh/_ns/gd_sh.gd")
+const Model = preload("res://addons/_lib/gdsh/src/ui/terminal_input.gd")
 const TUIList = preload("res://tests/gdsh/fixtures/tui_list.gd")
 var suite
 

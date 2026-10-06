@@ -1,7 +1,7 @@
 extends SceneTree
 ## Run with -- iterations samples; timings exclude parsing, compilation, and warmup.
 
-const Optimizer = preload("res://addons/addon_lib/gdscript_optimizer/optimizer.gd")
+const Optimizer = preload("res://addons/_lib/gdscript_optimizer/optimizer.gd")
 const FIXTURE = "res://tests/gdscript_optimizer/fixtures/expression_inline/predicates.gd"
 
 func _init() -> void:

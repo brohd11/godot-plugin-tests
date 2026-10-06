@@ -1,6 +1,6 @@
 extends RefCounted
 
-const Optimizer = preload("res://addons/addon_lib/gdscript_optimizer/optimizer.gd")
+const Optimizer = preload("res://addons/_lib/gdscript_optimizer/optimizer.gd")
 const BASE = "res://tests/gdscript_optimizer/fixtures/inline/"
 static var _failures:Array = []
 static var _passed:int = 0

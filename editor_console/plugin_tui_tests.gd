@@ -1,5 +1,5 @@
 extends RefCounted
-const Sh = preload("res://addons/addon_lib/gdsh/_ns/gd_sh.gd")
+const Sh = preload("res://addons/_lib/gdsh/_ns/gd_sh.gd")
 
 class EditorRouter extends "res://addons/editor_console/src/default_commands/editor/editor.gd":
 	var program

@@ -12,8 +12,8 @@ extends EditorScript
 ## fixtures/diff_expected.patch — it is the only thing here that can catch the whole algorithm being
 ## subtly wrong in a way that is self consistent.
 
-const GitUtil = preload("res://addons/addon_lib/git_service/src/git_util.gd")
-const GitDiff = preload("res://addons/addon_lib/git_service/src/git_diff.gd")
+const GitUtil = preload("res://addons/_lib/git_service/src/git_util.gd")
+const GitDiff = preload("res://addons/_lib/git_service/src/git_diff.gd")
 
 const FIXTURES = "res://tests/git_service/fixtures/"
 const REPO = "res://" # the fixtures' notional repo root, so keys read as res://<path>

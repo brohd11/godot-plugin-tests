@@ -6,7 +6,7 @@ extends EditorScript
 ##
 ##     load("res://tests/tag_parser/registry_test.gd").run_tests()
 
-const TagRegistry = preload("res://addons/addon_lib/tag_parser/registry.gd")
+const TagRegistry = preload("res://addons/_lib/tag_parser/registry.gd")
 const P = "res://t.gd"
 const DIR = "user://tag_parser_registry_tests/"
 

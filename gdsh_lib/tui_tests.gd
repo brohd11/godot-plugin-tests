@@ -1,7 +1,7 @@
 extends RefCounted
-const Sh = preload("res://addons/addon_lib/gdsh/_ns/gd_sh.gd")
+const Sh = preload("res://addons/_lib/gdsh/_ns/gd_sh.gd")
 const Flow = preload("res://tests/gdsh_lib/fixtures/tui_flow.gd")
-const TUI = preload("res://addons/addon_lib/gdsh_lib/tui/manifest.gd").TUI
+const TUI = preload("res://addons/_lib/gdsh_lib/tui/manifest.gd").TUI
 
 class Probe extends TUI.Component:
 	var received:Array = []
@@ -66,7 +66,7 @@ static func key(code:int, echo:=false, unicode:=0, shift:=false, ctrl:=false, me
 	return Sh.TUIMsg.new(Sh.TUIMsg.Type.KEY, event)
 
 func run_sync(suite) -> void:
-	suite.check(Sh.Load.load_directory("res://addons/addon_lib/gdsh_lib/tui").is_empty(), "TUI library registers no shell commands")
+	suite.check(Sh.Load.load_directory("res://addons/_lib/gdsh_lib/tui").is_empty(), "TUI library registers no shell commands")
 	_test_router(suite)
 	_test_focus(suite)
 	_test_list(suite)

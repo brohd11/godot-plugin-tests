@@ -3,7 +3,7 @@ extends EditorScript
 
 ## Tests for release export package placement - the gdaddon resolveInstall port. Layouts are
 ## plain file lists with cfg values in a dictionary, modelled on real packages: Godot-YAML-Parser's
-## tag source and its release zip, and the nested addon_lib repos in this project.
+## tag source and its release zip, and the nested _lib repos in this project.
 ##
 ##     load("res://tests/plugin_exporter/package_layout_test.gd").run_tests()
 
@@ -42,8 +42,8 @@ func _run() -> void: # EditorScript entry, for running this from the editor
 ## Submodule style: the repo is the addon, so only its own cfg can place it.
 static func _test_root_cfg() -> void:
 	var files = ["plugin.cfg", "plugin.gd", "src/a.gd"]
-	_check("root: path=", _locate(files, {"": {"path": "addons/addon_lib/brohd"}}),
-		{"src": "", "dest": "res://addons/addon_lib/brohd"})
+	_check("root: path=", _locate(files, {"": {"path": "addons/_lib/brohd"}}),
+		{"src": "", "dest": "res://addons/_lib/brohd"})
 	_check("root: dir= wins over path=", _locate(files, {"": {"dir": "addons/x", "path": "addons/y"}}).dest,
 		"res://addons/x")
 	_check("root: res:// prefix tolerated", _locate(files, {"": {"path": "res://addons/z/"}}).dest, "res://addons/z")
@@ -77,9 +77,9 @@ static func _test_release_zip() -> void:
 
 ## Namespace levels without a cfg are descended, however deep the nesting goes.
 static func _test_namespace_descent() -> void:
-	var files = ["project.godot", "addons/addon_lib/gdsh_lib/utils/version.cfg", "addons/addon_lib/gdsh_lib/utils/u.gd"]
-	_check("deep namespace", _locate(files, {"addons/addon_lib/gdsh_lib/utils": {}}),
-		{"src": "addons/addon_lib/gdsh_lib/utils", "dest": "res://addons/addon_lib/gdsh_lib/utils"})
+	var files = ["project.godot", "addons/_lib/gdsh_lib/utils/version.cfg", "addons/_lib/gdsh_lib/utils/u.gd"]
+	_check("deep namespace", _locate(files, {"addons/_lib/gdsh_lib/utils": {}}),
+		{"src": "addons/_lib/gdsh_lib/utils", "dest": "res://addons/_lib/gdsh_lib/utils"})
 
 	var nested = ["addons/outer/plugin.cfg", "addons/outer/inner/plugin.cfg", "addons/outer/a.gd"]
 	_check("nested cfg rides along with its parent", _locate(nested, {"addons/outer": {}, "addons/outer/inner": {}}).src,
