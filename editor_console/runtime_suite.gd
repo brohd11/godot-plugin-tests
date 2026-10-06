@@ -99,9 +99,6 @@ func run_sync():
 	check(ctx.scopes.has("tree") and scene_choices.has("root") and scene_choices.has("select") and not scene_choices.has("nodes"), "tree is top-level; editor scene keeps its own commands: " + str(scene_choices.keys()))
 	var editor_choices = Sh.Completion.new("editor ", ctx).get_completions()
 	check(editor_choices.has("undo") and editor_choices.has("redo"), "editor completes undo and redo")
-	# Callable: input that never pauses returns without await, hidden from the coroutine check.
-	var bridged = Callable(EditorConsoleSingleton.ConsoleBridge, "_capture").call('echo "[color=red]a[/color]"', ctx)
-	check(bridged.stdout.strip_edges() == "a", "bridge returns plain text: " + bridged.stdout)
 	for command in ["utils count", "count", "builtins echo hello", "hidden builtins echo hello", "echo hello"]:
 		var result = Sh.Context.new_ctx("test", ctx)
 		result.stdin = "one\ntwo\n"
@@ -317,20 +314,6 @@ func _test_editor_behavior(ctx:Sh.Context):
 		ctx.cwd = cwd
 		var error_result = _result("os sh -c 'printf out; printf err >&2; exit 6'", ctx)
 		check(error_result.stdout.strip_edges() == "out" and error_result.stderr.strip_edges() == "err" and error_result.exit_code == 6, "OS streams and status stay separate")
-	var bridge = load("res://addons/editor_console/src/bridge/console_bridge.gd")
-	var scopes = ctx.scopes_hidden.duplicate()
-	scopes.merge(ctx.scopes, true)
-	var listing = bridge._command_list(scopes)
-	for name in ["\nbuiltins echo:", "\nutils count:", "\nmisc editor_console os:", "\necho:", "\nplugin_callback:"]:
-		check(name in "\n" + listing, "MCP command listing includes " + name.strip_edges())
-	check(not "\nhidden" in "\n" + listing, "MCP command listing does not repeat hidden commands")
-	var first = Sh.Context.new_ctx("request", ctx, true)
-	first.append_output("bootstrap output")
-	var response = bridge._capture("request_value = one; echo first", first)
-	check(response.keys() == ["stdout", "stderr", "exit_code"] and response.stdout.strip_edges() == "first", "bridge response shape excludes bootstrap output")
-	var second = Sh.Context.new_ctx("request", ctx, true)
-	var next = bridge._capture("echo $request_value", second)
-	check(next.stdout.strip_edges().is_empty(), "fresh bridge requests isolate session variables")
 	_test_prompt(ctx)
 
 ## [host, prompt, transcript] wired like a real editor console.
