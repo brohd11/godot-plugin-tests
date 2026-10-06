@@ -8,9 +8,9 @@ extends EditorScript
 ## from a repo built to hold every awkward case at once: a path with a space, a C-quoted path, a
 ## rename, a staged delete, a staged add, a binary file, a detached HEAD and an empty repo.
 
-const GitUtil = preload("res://addons/addon_lib/brohd/alib_editor/misc/git_service/git_util.gd")
+const GitUtil = preload("res://addons/addon_lib/git_service/src/git_util.gd")
 
-const FIXTURES = "res://tests/brohd/git/fixtures/"
+const FIXTURES = "res://tests/git_service/fixtures/"
 const REPO = "res://" # the fixtures' notional repo root, so keys read as res://<path>
 
 static var _failures:Array[String] = []

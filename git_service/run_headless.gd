@@ -1,14 +1,14 @@
 extends SceneTree
 ## Clean-compile headless entry for the git suites, exiting with a CI code.
-##     godot --headless --path . --script res://tests/brohd/git/run_headless.gd
+##     godot --headless --path . --script res://tests/git_service/run_headless.gd
 ##
 ## Every suite is pure — parse_status / parse_patch / parse_blame over captured fixtures, and a line
 ## diff that never had anything to do with git — so nothing here spawns git.
 
 const SUITES:PackedStringArray = [
-	"res://tests/brohd/git/git_util_test.gd",
-	"res://tests/brohd/git/git_diff_test.gd",
-	"res://tests/brohd/git/git_blame_test.gd",
+	"res://tests/git_service/git_util_test.gd",
+	"res://tests/git_service/git_diff_test.gd",
+	"res://tests/git_service/git_blame_test.gd",
 ]
 
 func _init() -> void:

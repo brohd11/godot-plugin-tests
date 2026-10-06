@@ -12,9 +12,9 @@ extends EditorScript
 ## that commit appears, so the later groups of the same commit are a bare sha line. A parser that
 ## expects a header per group loses every field on them, and the fixture would still look parsed.
 
-const GitUtil = preload("res://addons/addon_lib/brohd/alib_editor/misc/git_service/git_util.gd")
+const GitUtil = preload("res://addons/addon_lib/git_service/src/git_util.gd")
 
-const FIXTURES = "res://tests/brohd/git/fixtures/"
+const FIXTURES = "res://tests/git_service/fixtures/"
 const REPO = "res://"
 
 ## The oldest commit in the fixture, and the one carrying `boundary`
