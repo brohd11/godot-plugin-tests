@@ -2,8 +2,8 @@
 extends EditorScript
 
 ## Tests for the build_require writer: reading the specs a config already lists in every shape this
-## project uses, and splicing a new list back in without touching anything else. Pure text, so no
-## crawl, no git and no editor.
+## project uses, and splicing a new list back in without touching anything else. Temporary configs
+## exercise apply() without a crawl, git or editor.
 ##
 ##     load("res://tests/plugin_exporter/require_update_test.gd").run_tests()
 
@@ -26,6 +26,7 @@ static func run_tests() -> Dictionary:
 	_test_empty()
 	_test_untouched()
 	_test_repin()
+	_test_apply_require_ref()
 
 	var output:Array[String] = []
 	output.append("require_update: %d passed, %d failed" % [_passed, _failures.size()])
@@ -43,6 +44,12 @@ static func _test_read_yaml() -> void:
 		'export_root: "x"\nbuild_require:\n  - "a/b@v1"\n  - c/d@v2\nexports: []\n', "yml"),
 		["a/b@v1", "c/d@v2"])
 	_check("@require dropped", RequireUpdate.read_build_require("build_require: @require\n", "yml"), [])
+	_check("double-quoted @require dropped", RequireUpdate.read_build_require('build_require: "@require"\n', "yml"), [])
+	_check("single-quoted @require dropped", RequireUpdate.read_build_require("build_require: '@require'\n", "yml"), [])
+	_check("mixed block drops @require", RequireUpdate.read_build_require(
+		"build_require:\n  - \"@require\"\n  - a/b@v1\n  - '@require'\n", "yml"), ["a/b@v1"])
+	_check("mixed flow drops @require", RequireUpdate.read_build_require(
+		"build_require: [\"@require\", a/b@v1, '@require']\n", "yml"), ["a/b@v1"])
 	_check("scalar spec", RequireUpdate.read_build_require('build_require: "a/b@v1"\n', "yml"), ["a/b@v1"])
 	_check("flow seq", RequireUpdate.read_build_require('build_require: ["a/b@v1", "c/d@v2"]\n', "yml"),
 		["a/b@v1", "c/d@v2"])
@@ -64,6 +71,8 @@ static func _test_read_json() -> void:
 		["a/b@v1", "c/d@v2"])
 	_check("json one line", RequireUpdate.read_build_require('{"build_require": ["a/b@v1"]}', "json"), ["a/b@v1"])
 	_check("json scalar @require", RequireUpdate.read_build_require('{"build_require": "@require"}', "json"), [])
+	_check("json mixed array drops @require", RequireUpdate.read_build_require(
+		'{"build_require": ["@require", "a/b@v1"]}', "json"), ["a/b@v1"])
 	_check("json missing key", RequireUpdate.read_build_require('{"export_root": "x"}', "json"), [])
 
 
@@ -128,6 +137,51 @@ static func _test_repin() -> void:
 		"gitlab.com/a/b/source@v2")
 	_check("short_id drops only github.com", RequireUpdate.short_id("github.com/a/b"), "a/b")
 	_check("short_id keeps other hosts", RequireUpdate.short_id("gitlab.com/a/b"), "gitlab.com/a/b")
+
+
+static func _test_apply_require_ref() -> void:
+	var root = "res://tests/plugin_exporter/fixtures/_require_update_%d" % Time.get_ticks_usec()
+	var err = DirAccess.make_dir_recursive_absolute(root)
+	_check("apply fixture directory", err, OK)
+	if err != OK:
+		return
+	var cfg_path = root.path_join("plugin.cfg")
+	var cfg_text = '[plugin]\nversion="1.2.3"\nrequire=["optional/dep@v9"]\n'
+	if not _write(cfg_path, cfg_text):
+		DirAccess.remove_absolute(root)
+		return
+	var path = root.path_join("plugin_export.yml")
+	var report = {"target": root, "config_path": path, "groups": {root: {"rows": []}}}
+	var row = {"id": "github.com/a/b", "dir": root, "via": "cfg", "declared": ""}
+	var head = 'export_root: "x"\n# keep before\n'
+	var tail = '# keep after\ncompile_require: []\nexports: []\n'
+	for marker in ['"@require"', "'@require'", "@require"]:
+		for overwrite in [false, true]:
+			for prune in [false, true]:
+				for has_deps in [false, true]:
+					report.groups[root].rows = [row] if has_deps else []
+					if not _write(path, head + "build_require: " + marker + "\n" + tail):
+						continue
+					var label = "apply %s overwrite=%s prune=%s deps=%s" % [marker, overwrite, prune, has_deps]
+					var result = RequireUpdate.apply(report, overwrite, prune)
+					_check(label + " errors", result.errors, [])
+					_check(label + " changed", result.changed, true)
+					var expected = 'build_require:\n  - "a/b@v1.2.3"\n' if has_deps else "build_require: []\n"
+					_check(label + " contents", FileAccess.get_file_as_string(path), head + expected + tail)
+					_check(label + " marker not kept", result.kept, [])
+	_check("apply leaves plugin.cfg untouched", FileAccess.get_file_as_string(cfg_path), cfg_text)
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(cfg_path)
+	DirAccess.remove_absolute(root)
+
+
+static func _write(path:String, content:String) -> bool:
+	var file = FileAccess.open(path, FileAccess.WRITE)
+	_check("open fixture " + path, file != null, true)
+	if file == null:
+		return false
+	file.store_string(content)
+	return true
 
 
 static func _check(label:String, got, expected) -> void:

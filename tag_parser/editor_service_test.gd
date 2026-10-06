@@ -72,7 +72,7 @@ static func _test_singleton() -> void:
 	_check("legacy function lookup", Service.get_metadata_for_type(FIXTURE + ".Inner::method", TAG)[TAG].args, "argument")
 	_check("occurrence query filters by tag", Service.get_tag_entries(FIXTURE, TAG).size(), 3)
 	_check("unknown occurrence filter", Service.get_tag_entries(FIXTURE, "absent"), [])
-	var parser = Service.GDScriptParser.new()
+	var parser = GDScriptParser.new()
 	parser.set_script_path(FIXTURE)
 	parser.set_source_code("#! tag_parser_service_test buffer\nvar member")
 	_check("legacy parser-buffer API reads unsaved text", service.parse_script_metadata(parser).member[TAG].args, "buffer")

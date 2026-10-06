@@ -14,7 +14,7 @@ extends SceneTree
 
 const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const Keys = GDScriptParser.Keys
-const URString = GDScriptParser.URString
+const UString = GDScriptParser.UString
 
 const DIR := "res://tests/gdscript_parser/"
 const TEST_CACHE_DIR := "res://.godot/addons/gdscript_parser/parse_cache_meta_test"
@@ -205,7 +205,7 @@ static func _make_parser(script_path: String, use_native := true) -> GDScriptPar
 
 
 static func _ensure_global_class_registry() -> void:
-	var ucd = GDScriptParser.URClassDetail
+	var ucd = GDScriptParser.UClassDetail
 	if ucd.global_class_registry.is_empty():
 		ucd.global_class_registry = ucd.get_all_global_class_paths()
 

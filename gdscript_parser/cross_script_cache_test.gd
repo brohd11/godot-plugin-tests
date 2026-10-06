@@ -392,6 +392,8 @@ static func _test_file_change_upgrades() -> String:
 		var p:GDScriptParser = d.get_parser_for_path(tmp)
 		if p == null or p.state != GDScriptParser.STATE_LIVE:
 			res = "changed file did not produce a LIVE parser"
+		elif not p.get_class_object().get_members().has("name_"):
+			res = "LIVE parser reused old resource source instead of the rewritten file"
 	_delete_file(tmp)
 	return res
 
@@ -674,7 +676,7 @@ static func _find_resolved_member(parser:GDScriptParser) -> Dictionary:
 	return {}
 
 static func _ensure_global_class_registry() -> void:
-	var ucd = GDScriptParser.URClassDetail
+	var ucd = GDScriptParser.UClassDetail
 	if ucd.global_class_registry.is_empty():
 		ucd.global_class_registry = ucd.get_all_global_class_paths()
 
