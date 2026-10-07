@@ -229,7 +229,7 @@ static func _test_reduction() -> void:
 	_check("reduced: bare-used hub kept", _found(dir, "_ns/singletons.gd"), true)
 	# Head already the deepest file it names, so the chain must be left alone.
 	_check("reduced: no-op chain untouched", _has(dir, "src/core/access_paths.gd",
-		".pattern"), true)
+		"YAMLParser.NODE_DICT"), true)
 
 	# The derived script rewrites its uses but must not redeclare the inherited constant.
 	_check("reduced: base declares the binding", _has(dir, "src/core/access_base.gd",
