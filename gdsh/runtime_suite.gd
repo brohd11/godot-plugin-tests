@@ -67,6 +67,7 @@ func run_frames():
 	await _test_console_node_completion()
 	await _test_console_mixed_path_completion()
 	await _test_async()
+	await _test_host()
 	await _test_streaming_console()
 	if not Engine.is_editor_hint():
 		await preload("res://tests/gdsh/terminal_tests.gd").new().run(self)
@@ -115,6 +116,39 @@ func _test_async():
 	check(not console.is_busy and console.input.editable, "console unlocks after the command")
 	await _tree().process_frame # Resumed inside command_finished's emission, which locks the console.
 	console.free()
+
+
+## GDSh.Host: argv in, plain results out, with cwd/cwn carried between requests.
+func _test_host():
+	var argv_ctx = _sync("execute_argv", [["echo", "a;b", "$HOME", "'q'"], session()])
+	equal(argv_ctx.stdout.strip_edges(), "a;b $HOME 'q'", "execute_argv passes words through unparsed")
+	var flags = flag_session()
+	_sync("execute_argv", [["flagvars", "--text=a b", "-l"], flags])
+	equal(flags.stdout.strip_edges(), "a b:0:0.5:true:false:0,0", "execute_argv still reads flags")
+
+	var host = Sh.Host.new({"command_dirs": [FIXTURES + "flags/", COMMANDS]})
+	var names = host.host_commands().map(func(c): return c.name)
+	check(names.has("flagvars") and names.has("sink") and names.has("cd"), "host offers added commands and builtins: " + str(names))
+	var flagvars = host.host_commands().filter(func(c): return c.name == "flagvars")
+	equal(flagvars[0].summary if not flagvars.is_empty() else "", "Report flag vars set by the default flag binding", "host command summary")
+	var result = await host.host_run(["flagvars", "--count=3"])
+	equal(result, {"stdout": "default:3:0.5:false:false:0,0\n", "stderr": "", "exit_code": 0}, "host_run result")
+	result = await host.host_run(["sink"], "piped in")
+	check(result.stdout.contains("piped in"), "host_run stdin: " + str(result))
+	result = await host.host_run(["missing"])
+	check(result.exit_code != 0 and result.stderr.contains("Unknown command: missing"), "host_run rejects unknown names: " + str(result))
+	check((await host.host_help("flagvars")).contains("Report flag vars"), "host_help")
+	equal(await host.host_help("missing"), "", "host_help for an unknown name")
+
+	equal((await host.host_run(["cd", "res://tests"])).exit_code, 0, "host cd")
+	equal(host.cwd, "res://tests", "host keeps cwd after cd")
+	await host.host_run(["cd", "gdsh"])
+	equal(host.cwd, "res://tests/gdsh", "the next request starts in the kept cwd")
+	await host.host_run(["cn", "/root"])
+	equal(host.cwn, "/root", "host keeps cwn after cn")
+
+	var plain = Sh.Host.new({"builtins": false, "commands": {"tally": COMMANDS + "counter.gd"}})
+	equal(plain.host_commands().map(func(c): return c.name), ["tally"], "builtins off; command added under a given name")
 
 
 func stream_session():
