@@ -29,6 +29,7 @@ const SUITES := [
 	{"name": "Lambda Scope",             "script": "res://tests/gdscript_parser/lambda_scope_test.gd"},
 	{"name": "Inline Lambdas",           "script": "res://tests/gdscript_parser/inline_lambda_test.gd"},
 	{"name": "Relative Preloads",        "script": "res://tests/gdscript_parser/relative_preload_test.gd"},
+	{"name": "LSP Reparent",             "script": "res://tests/gdscript_parser/lsp_reparent_test.gd"},
 ]
 
 
