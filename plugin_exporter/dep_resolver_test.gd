@@ -65,6 +65,7 @@ static func run_tests() -> Dictionary:
 	_test_local_override()
 	_test_cfg_require_ignored()
 	_test_cfg_require_ref()
+	_test_addon_cfg()
 	_test_verify()
 	_test_kinds()
 	_test_target_layout()
@@ -125,6 +126,8 @@ static func _test_export_config() -> void:
 	_check("@require: cfg without require is empty, not an error", [no_key.error, no_key.requires.size()], ["", 0])
 	_check("@require: no cfg is an error", DepResolver.requires_in_export_config(_ex(["@require"]), "yml").error != "", true)
 	_check("@require: compile_require is an error", DepResolver.requires_in_export_config(_ex([], ["@require"]), "yml", one_line).error != "", true)
+	_check("cfg_require: [addon] list wins", DepResolver.cfg_require('[plugin]\nrequire=["a/b@v1"]\n[addon]\nrequire=[\n"c/d@v1",\n]\n'), ["c/d@v1"])
+	_check("cfg_require: [plugin] list when [addon] has none", DepResolver.cfg_require('[addon]\nname="x"\n[plugin]\nrequire=["a/b@v1"]\n'), ["a/b@v1"])
 	_check("cfg_require: other section ignored", DepResolver.cfg_require('[deps]\nrequire=["a/b@v1"]\n[plugin]\nname="x"\n').size(), 0)
 
 
@@ -282,6 +285,19 @@ static func _test_cfg_require_ref() -> void:
 	_check("@require: resolved " + str(r.errors), lock.is_empty(), false)
 	_check("@require: cfg list followed, deps' cfgs only when opted in", lock.get("deps", []).map(func(e): return e.repo_id),
 		["github.com/me/dep", "github.com/me/lib"])
+
+
+## addon.cfg is a package cfg too, and its [addon] keys win over [plugin]'s.
+static func _test_addon_cfg() -> void:
+	var f = FakeFetcher.new()
+	var t = f.add("me/t", "v1", {"plugin.cfg": '[plugin]\nrequire=["me/x@v1"]\n[addon]\nrequire=["me/a@v1"]\n', EX: _ex(["@require"])})
+	f.add("me/a", "v1", {"addon.cfg": '[plugin]\npath="addons/wrong"\n[addon]\npath="addons/a"\n'})
+	var r = DepResolver.new(f)
+	var lock = r.resolve(t, "v1", "res://addons/t")
+	_check("addon.cfg: resolved " + str(r.errors), lock.is_empty(), false)
+	if not lock.is_empty():
+		_check("addon.cfg: [addon] require followed", lock.deps.map(func(e): return e.repo_id), ["github.com/me/a"])
+		_check("addon.cfg: [addon] path= wins", lock.deps[0].path, "res://addons/a")
 
 
 ## compile_require marks its target for the compile check, and everything that target needs comes

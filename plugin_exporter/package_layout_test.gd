@@ -96,6 +96,8 @@ static func _test_bundles() -> void:
 	_check("bundle: single cfg beside an asset folder", _locate(["addons/icons/a.svg", "addons/p/plugin.cfg"],
 		{"addons/p": {}}).dest, "res://addons/p")
 	_check("asset pack with no cfg", _locate(["addons/icons/a.svg", "README.md"], {}).dest, "res://addons/icons")
+	_check("bundle: addon.cfg marks a package", _locate(["addons/icons/a.svg", "addons/p/addon.cfg"],
+		{"addons/p": {}}).dest, "res://addons/p")
 
 
 static func _test_junk() -> void:

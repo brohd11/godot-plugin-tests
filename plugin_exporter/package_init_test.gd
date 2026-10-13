@@ -1,6 +1,6 @@
 @tool
 extends EditorScript
-## package_init's version.cfg template and the unpackaged-dir completion scan.
+## package_init's package cfg template and the unpackaged-dir completion scan.
 
 const Discovery = preload("res://addons/plugin_exporter/src/class/export/package_discovery.gd")
 const PluginInit = preload("res://addons/plugin_exporter/src/class/export/plugin_init.gd")
@@ -14,7 +14,7 @@ static var _passed:int = 0
 static func run_tests() -> Dictionary:
 	_failures = []
 	_passed = 0
-	_test_version_cfg()
+	_test_package_cfg()
 	_test_unpackaged()
 	var output:Array[String] = ["package_init: %d passed, %d failed" % [_passed, _failures.size()]]
 	for failure in _failures:
@@ -22,9 +22,9 @@ static func run_tests() -> Dictionary:
 	return {"result": _failures.size(), "output": output}
 
 
-static func _test_version_cfg() -> void:
+static func _test_package_cfg() -> void:
 	var cfg = ConfigFile.new()
-	_check("cfg parses", cfg.parse(PluginInit.version_cfg_text("res://addons/_lib/my_pkg/")), OK)
+	_check("cfg parses", cfg.parse(PluginInit.package_cfg_text("res://addons/_lib/my_pkg/")), OK)
 	_check("name is folder", cfg.get_value("plugin", "name"), "my_pkg")
 	_check("path drops res://", cfg.get_value("plugin", "path"), "addons/_lib/my_pkg")
 	_check("version", cfg.get_value("plugin", "version"), "0.1.0")
@@ -38,6 +38,7 @@ static func _test_unpackaged() -> void:
 	_mkdir("bare/deep/deeper")
 	_mkdir("group/lib/src")
 	_mkdir("group/new_lib")
+	_write("addon_pkg/addon.cfg")
 	_mkdir(".hidden/x")
 	_mkdir("_export_ignore/x")
 	_write("plugin/plugin.cfg")
