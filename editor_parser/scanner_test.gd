@@ -1,7 +1,7 @@
 extends RefCounted
 
-const Scanner = preload("res://addons/_lib/tag_parser/scanner.gd")
-const Registry = preload("res://addons/_lib/tag_parser/registry.gd")
+const Scanner = preload("res://addons/_lib/editor_parser/src/tag/scanner.gd")
+const Registry = preload("res://addons/_lib/editor_parser/src/tag/registry.gd")
 const P = "res://sample.gd"
 
 static var _failures:Array = []

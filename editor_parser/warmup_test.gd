@@ -4,15 +4,15 @@ extends SceneTree
 ## completes any partial cache. _warmup_one / _resolve_all are tree-independent, so drive them
 ## directly over a fixture (skipping run()'s FileSystemSingleton enumeration + frame pacing).
 ##
-##     Godot --headless --path . --script res://tests/gdscript_parser/warmup_test.gd
+##     Godot --headless --path . --script res://tests/editor_parser/warmup_test.gd
 
-const ParserWarmup = preload("res://addons/_lib/brohd/alib_editor/misc/parser/editor_parser/warmup.gd")
+const ParserWarmup = preload("res://addons/_lib/editor_parser/src/gdscript/warmup.gd")
 
-const DIR := "res://tests/gdscript_parser/"
+const DIR := "res://tests/editor_parser/"
 # own dir: the suites share one process under the aggregator, so don't reuse another suite's cache dir
 const TEST_CACHE_DIR := "res://.godot/addons/gdscript_parser/parse_cache_warmup_test"
-# gp_service: top-level const aliases (T/TS/Scale) + a function with a typed local (`sc := make()`).
-const FIXTURE := DIR + "fixtures/gp_service.gd"
+# warmup_fixture: top-level const aliases (T/TS/Scale) + a function with a typed local (`sc := make()`).
+const FIXTURE := DIR + "fixtures/warmup_fixture.gd"
 const LOCAL_FUNC := "_s_local_scale_alias"
 const LOCAL_VAR := "sc"
 

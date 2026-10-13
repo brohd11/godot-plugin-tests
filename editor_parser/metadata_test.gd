@@ -1,7 +1,7 @@
 extends RefCounted
 
-const Scanner = preload("res://addons/_lib/tag_parser/scanner.gd")
-const Metadata = preload("res://addons/_lib/tag_parser/editor/metadata.gd")
+const Scanner = preload("res://addons/_lib/editor_parser/src/tag/scanner.gd")
+const Metadata = preload("res://addons/_lib/editor_parser/src/tag/metadata.gd")
 
 class Handler:
 	extends RefCounted

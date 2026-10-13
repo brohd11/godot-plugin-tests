@@ -15,15 +15,15 @@ def main():
     with tempfile.TemporaryDirectory(prefix="tag-parser-core-") as directory:
         project = Path(directory)
         for relative in (
-            "addons/_lib/tag_parser/scanner.gd",
-            "addons/_lib/tag_parser/options.gd",
-            "addons/_lib/tag_parser/registry.gd",
-            "addons/_lib/tag_parser/editor/metadata.gd",
-            "tests/tag_parser/run_headless.gd",
-            "tests/tag_parser/registry_test.gd",
-            "tests/tag_parser/scanner_test.gd",
-            "tests/tag_parser/options_test.gd",
-            "tests/tag_parser/metadata_test.gd",
+            "addons/_lib/editor_parser/src/tag/scanner.gd",
+            "addons/_lib/editor_parser/src/tag/options.gd",
+            "addons/_lib/editor_parser/src/tag/registry.gd",
+            "addons/_lib/editor_parser/src/tag/metadata.gd",
+            "tests/editor_parser/run_headless.gd",
+            "tests/editor_parser/registry_test.gd",
+            "tests/editor_parser/scanner_test.gd",
+            "tests/editor_parser/options_test.gd",
+            "tests/editor_parser/metadata_test.gd",
         ):
             target = project / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -31,7 +31,7 @@ def main():
         (project / "project.godot").write_text('config_version=5\n[application]\nconfig/name="Tag Parser Core Test"\n')
         result = subprocess.run(
             [args.godot, "--headless", "--path", str(project), "--log-file", str(project / "run.log"),
-             "--script", "res://tests/tag_parser/run_headless.gd", "--", "--core"],
+             "--script", "res://tests/editor_parser/run_headless.gd", "--", "--core"],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, timeout=120,
         )

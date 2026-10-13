@@ -1,7 +1,7 @@
 extends RefCounted
 
 const Legacy = preload("res://addons/_lib/gdscript_optimizer/tag_registry.gd")
-const Shared = preload("res://addons/_lib/tag_parser/registry.gd")
+const Shared = preload("res://addons/_lib/editor_parser/src/tag/registry.gd")
 
 static func run_tests() -> Dictionary:
 	var source := PackedStringArray(["#! struct", "class Value:", "\tvar x:int"])

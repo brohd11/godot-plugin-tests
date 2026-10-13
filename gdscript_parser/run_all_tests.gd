@@ -19,7 +19,6 @@ const SUITES := [
 	{"name": "Cross-Script Cache",       "script": "res://tests/gdscript_parser/cross_script_cache_test.gd"},
 	{"name": "Serialization Round-Trip", "script": "res://tests/gdscript_parser/serialization_roundtrip_test.gd"},
 	{"name": "Member Metadata",          "script": "res://tests/gdscript_parser/member_metadata_test.gd"},
-	{"name": "Warmup",                   "script": "res://tests/gdscript_parser/warmup_test.gd"},
 	{"name": "Declaring Script",         "script": "res://tests/gdscript_parser/declaring_script_test.gd"},
 	{"name": "Global Enum",              "script": "res://tests/gdscript_parser/global_enum_test.gd"},
 	{"name": "Builtin Return",           "script": "res://tests/gdscript_parser/builtin_return_test.gd"},

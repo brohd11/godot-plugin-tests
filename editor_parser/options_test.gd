@@ -1,5 +1,5 @@
 extends RefCounted
-const Scanner = preload("res://addons/_lib/tag_parser/scanner.gd")
+const Scanner = preload("res://addons/_lib/editor_parser/src/tag/scanner.gd")
 
 static func run_tests() -> Dictionary:
 	var failures:Array = []

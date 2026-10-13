@@ -5,10 +5,10 @@ func _init() -> void:
 
 func _run() -> void:
 	var failures := 0
-	for name in ["options", "registry", "scanner", "metadata", "editor_service"]:
-		if name == "editor_service" and "--core" in OS.get_cmdline_user_args():
+	for name in ["options", "registry", "scanner", "metadata", "editor_service", "warmup"]:
+		if name in ["editor_service", "warmup"] and "--core" in OS.get_cmdline_user_args():
 			continue
-		var suite = load("res://tests/tag_parser/%s_test.gd" % name)
+		var suite = load("res://tests/editor_parser/%s_test.gd" % name)
 		if suite == null or not suite.can_instantiate() or not suite.has_method("run_tests"):
 			failures += 1
 			continue

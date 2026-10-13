@@ -1,10 +1,9 @@
 extends RefCounted
 
-const Service = preload("res://addons/_lib/tag_parser/editor/tag_parser.gd")
-const Legacy = preload("res://addons/_lib/brohd/alib_editor/misc/parser/tag_parser.gd")
+const Service = preload("res://addons/_lib/editor_parser/src/tag/tag_parser.gd")
 const P = "res://unsaved_tag_test.gd"
 const TAG = &"tag_parser_service_test"
-const FIXTURE = "res://tests/tag_parser/fixtures/metadata.gd"
+const FIXTURE = "res://tests/editor_parser/fixtures/metadata.gd"
 
 class Handler:
 	extends RefCounted
@@ -14,7 +13,7 @@ class Handler:
 		return raw.duplicate()
 
 class BufferService:
-	extends "res://addons/_lib/tag_parser/editor/tag_parser.gd"
+	extends "res://addons/_lib/editor_parser/src/tag/tag_parser.gd"
 	var buffer := ""
 	func _read_source(_path:String) -> String:
 		return buffer
@@ -30,7 +29,7 @@ static func run_tests() -> Dictionary:
 	_passed = 0
 	_test_buffers()
 	_test_singleton()
-	_check("all service checks completed", _passed + _failures.size(), 23)
+	_check("all service checks completed", _passed + _failures.size(), 22)
 	var output:Array = ["tag editor service: %d passed, %d failed" % [_passed, _failures.size()]]
 	output.append_array(_failures)
 	return {"result": _failures.size(), "output": output}
@@ -61,14 +60,13 @@ static func _test_buffers() -> void:
 static func _test_singleton() -> void:
 	var existed:bool = Service.instance_valid()
 	var service = Service.get_instance()
-	_check("legacy and new API use one instance", Legacy.get_instance() == service, true)
 	var handler := Handler.new()
 	service._cache["sentinel"] = true
-	Legacy.register_tag_parser(TAG, handler)
+	Service.register_tag_parser(TAG, handler)
 	_check("registration visible through new API", Service.get_tag_parser(TAG), handler)
 	_check("registration clears metadata cache", service._cache, {})
-	_check("legacy member lookup", Legacy.get_metadata_for_type(FIXTURE + "::member", TAG)[TAG].args, "value")
-	_check("legacy class lookup", Legacy.get_metadata_for_type(FIXTURE + ".Inner::Inner", TAG)[TAG].args, "class")
+	_check("legacy member lookup", Service.get_metadata_for_type(FIXTURE + "::member", TAG)[TAG].args, "value")
+	_check("legacy class lookup", Service.get_metadata_for_type(FIXTURE + ".Inner::Inner", TAG)[TAG].args, "class")
 	_check("legacy function lookup", Service.get_metadata_for_type(FIXTURE + ".Inner::method", TAG)[TAG].args, "argument")
 	_check("occurrence query filters by tag", Service.get_tag_entries(FIXTURE, TAG).size(), 3)
 	_check("unknown occurrence filter", Service.get_tag_entries(FIXTURE, "absent"), [])
@@ -79,12 +77,12 @@ static func _test_singleton() -> void:
 	parser.code_edit.free()
 	service._cache["sentinel"] = true
 	Service.unregister_tag_parser(TAG)
-	_check("unregistration visible through legacy API", Legacy.get_tag_parser(TAG, false), null)
+	_check("unregistration visible", Service.get_tag_parser(TAG, false), null)
 	_check("unregistration clears metadata cache", service._cache, {})
 	_check("no active script occurrence query", Service.get_tag_entries(), [])
-	_check("no active script metadata query", Legacy.get_tag_metadata(TAG), null)
+	_check("no active script metadata query", Service.get_tag_metadata(TAG), null)
 	_check("missing file metadata query", service.get_script_metadata("res://absent_tag_test.gd"), {})
-	Legacy.clear_cache()
+	Service.clear_cache()
 	_check("legacy cache reset clears all layers", [service._cache, service._sources], [{}, {}])
 	if not existed:
 		service.free()

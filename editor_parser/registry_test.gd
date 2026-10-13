@@ -4,9 +4,9 @@ extends EditorScript
 ## Tests for the shared TagRegistry - `#!` tags resolved to the member, file or line they
 ## are attached to, keyed by parser type path.
 ##
-##     load("res://tests/tag_parser/registry_test.gd").run_tests()
+##     load("res://tests/editor_parser/registry_test.gd").run_tests()
 
-const TagRegistry = preload("res://addons/_lib/tag_parser/registry.gd")
+const TagRegistry = preload("res://addons/_lib/editor_parser/src/tag/registry.gd")
 const P = "res://t.gd"
 const DIR = "user://tag_parser_registry_tests/"
 
