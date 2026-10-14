@@ -4,7 +4,7 @@ extends RefCounted
 ## discard the service buffer and leave the native manager permanently detached. Editor-only: the
 ## service node needs EditorNode, so headless runs report a SKIP.
 
-const Parser = preload("res://addons/_lib/gdscript_parser/gdscript_parser.gd")
+const Parser = preload("res://addons/_lib/gdscript_parser/src/gdscript_parser.gd")
 const LspSupport = preload("res://tests/gdscript_parser/lsp_support.gd")
 const SOURCE = "res://tests/gdscript_parser/fixtures/relative_preload.gd"
 

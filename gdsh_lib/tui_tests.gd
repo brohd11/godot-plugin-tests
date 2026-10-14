@@ -1,7 +1,7 @@
 extends RefCounted
 const Sh = preload("res://addons/_lib/gdsh/_ns/gd_sh.gd")
 const Flow = preload("res://tests/gdsh_lib/fixtures/tui_flow.gd")
-const TUI = preload("res://addons/_lib/gdsh_lib/tui/manifest.gd").TUI
+const TUI = preload("res://addons/_lib/gdsh_lib/tui/src/manifest.gd").TUI
 
 class Probe extends TUI.Component:
 	var received:Array = []

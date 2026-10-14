@@ -176,7 +176,7 @@ static func _test_rewrites() -> void:
 	_check("uid preload resolved to the copy", _has(dir, "src/core/consumer.gd",
 		'preload("uid://'), false)
 	_check("malformed absolute path rewritten to the copy", _has(dir, "src/utils_remote.gd",
-		'preload("res://addons/plugin_exporter_test/src/remote/addons/_lib/brohd/alib_runtime/utils/u_list.gd")'), true)
+		'preload("res://addons/plugin_exporter_test/src/remote/addons/_lib/brohd/src/alib_runtime/utils/u_list.gd")'), true)
 	for variant in _dirs:
 		_check("%s: malformed absolute path normalized" % variant,
 			_has(_dirs[variant], "src/utils_remote.gd", "_lib/brohd//"), false)

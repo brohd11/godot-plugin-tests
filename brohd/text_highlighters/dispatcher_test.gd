@@ -3,9 +3,9 @@ extends SceneTree
 ## Headless (both cases, isolated): python3 tests/brohd/text_highlighters/run_headless.py
 ## Editor console: `test brohd/text_highlighters` runs it against this project.
 
-const Dispatcher = preload("res://addons/_lib/brohd/alib_runtime/misc/syntax_highlighters/text/dispatcher.gd")
-const TextHighlighter = preload("res://addons/_lib/brohd/alib_runtime/misc/syntax_highlighters/text/text_syntax_highlighter.gd")
-const Palette = preload("res://addons/_lib/brohd/alib_runtime/misc/syntax_highlighters/text/palette.gd")
+const Dispatcher = preload("res://addons/_lib/brohd/src/alib_runtime/misc/syntax_highlighters/text/dispatcher.gd")
+const TextHighlighter = preload("res://addons/_lib/brohd/src/alib_runtime/misc/syntax_highlighters/text/text_syntax_highlighter.gd")
+const Palette = preload("res://addons/_lib/brohd/src/alib_runtime/misc/syntax_highlighters/text/palette.gd")
 const PROVIDER = "res://addons/_lib/gdsh/src/ui/script_highlighter_logic.gd"
 static var checks := 0
 static var failures := 0

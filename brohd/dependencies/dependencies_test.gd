@@ -20,7 +20,7 @@ const Kind = Dependencies.Kind
 const DIR = "user://alib_dep_tests/"
 ## A real uid from _lib, so uid resolution is tested against the live registry.
 const UFILE_UID = "uid://gs632l1nhxaf"
-const UFILE_PATH = "res://addons/_lib/brohd/alib_runtime/utils/u_file.gd"
+const UFILE_PATH = "res://addons/_lib/brohd/src/alib_runtime/utils/u_file.gd"
 const DEAD_UID = "uid://baaaaaaaaaaaa"
 
 static var _failures:Array[String] = []

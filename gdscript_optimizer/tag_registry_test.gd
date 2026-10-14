@@ -1,6 +1,6 @@
 extends RefCounted
 
-const Legacy = preload("res://addons/_lib/gdscript_optimizer/tag_registry.gd")
+const Legacy = preload("res://addons/_lib/gdscript_optimizer/src/tag_registry.gd")
 const Shared = preload("res://addons/_lib/editor_parser/src/tag/registry.gd")
 
 static func run_tests() -> Dictionary:
