@@ -1,3 +1,0 @@
-@abstract
-class_name GDShAccessAbstractFixture
-extends RefCounted
